@@ -1,5 +1,7 @@
 package at.jku.ssw.ssw.jooksiklased;
 
+import static at.jku.ssw.ssw.jooksiklased.Message.*;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -34,6 +36,7 @@ import com.sun.jdi.event.EventIterator;
 import com.sun.jdi.event.EventQueue;
 import com.sun.jdi.event.EventSet;
 import com.sun.jdi.event.MethodEntryEvent;
+import com.sun.jdi.event.VMDisconnectEvent;
 import com.sun.jdi.request.BreakpointRequest;
 import com.sun.jdi.request.EventRequestManager;
 import com.sun.jdi.request.MethodEntryRequest;
@@ -53,11 +56,15 @@ public class TextDebugger {
 
 	private ThreadReference curThread;
 	private int countBreakpoints = 0;
+	private boolean terminate = false;
 
 	private TextDebugger() throws IOException,
 			IllegalConnectorArgumentsException {
+
+		// make space for pending operations
 		pendingOperations = new ConcurrentLinkedQueue<>();
 
+		// find attaching connector
 		AttachingConnector con = null;
 		Iterator<Connector> iter = Bootstrap.virtualMachineManager()
 				.allConnectors().iterator();
@@ -66,6 +73,8 @@ public class TextDebugger {
 			if (x.name().equals("com.sun.jdi.SocketAttach"))
 				con = (AttachingConnector) x;
 		}
+
+		// configure connector
 		Map<String, Argument> args = con.defaultArguments();
 		((Connector.Argument) args.get("port")).setValue("8000");
 
@@ -77,7 +86,7 @@ public class TextDebugger {
 
 		vm.suspend();
 
-		// Get current thread
+		// find current thread
 		for (ThreadReference t : vm.allThreads()) {
 			if (t.name().equals("main")) {
 				curThread = t;
@@ -86,10 +95,12 @@ public class TextDebugger {
 		}
 	}
 
+	/**
+	 * This method continues to next breakpoint if the VM is started.
+	 */
 	private void cont() {
 		if (!isLoaded()) {
-			System.out.println("Command 'cont' is not valid until the VM is "
-					+ "started with the 'run' command");
+			print(VM_NOT_RUNNING);
 			return;
 		}
 
@@ -100,7 +111,7 @@ public class TextDebugger {
 			curThread.resume();
 			vm.resume();
 		}
-		
+
 		EventQueue q = vm.eventQueue();
 
 		try {
@@ -115,14 +126,14 @@ public class TextDebugger {
 						vm.suspend();
 						BreakpointEvent be = (BreakpointEvent) e;
 
-						System.out.printf("Breakpoint hit: \"thread=%s\", %s, "
-								+ "line=%d bci=%d\n", be.thread(), be
-								.location().method(), be.location()
-								.lineNumber(), 0);
+						print(HIT_BREAKPOINT, be.thread(), be.location()
+								.method(), be.location().lineNumber(), 0);
 
 						// printVars(be.thread().frame(0));
 						countBreakpoints--;
 						return;
+					} else if (e instanceof VMDisconnectEvent) {
+						terminate = true;
 					} else {
 						System.out.println(e);
 						vm.resume();
@@ -131,17 +142,17 @@ public class TextDebugger {
 			}
 		} catch (InterruptedException e) {
 			e.printStackTrace();
-			// } catch (IncompatibleThreadStateException e) {
-			// e.printStackTrace();
 		} catch (VMDisconnectedException e) {
-			System.out.println("The application exited.");
+			print(EXIT);
 		}
 	}
 
+	/**
+	 * This method starts the VM and stops at first method entry.
+	 */
 	private void run() {
 		if (isLoaded()) {
-			System.out
-					.println("VM already running. Use 'cont' to continue after events.");
+			print(VM_RUNNING);
 			return;
 		}
 
@@ -178,17 +189,21 @@ public class TextDebugger {
 		}
 	}
 
-	private void setBreakpoint(Method m, int line) {
+	private void setBreakpoint(Location loc) {
+		final Method method = loc.method();
+		print(SET_BREAKPOINT, method, loc.lineNumber());
+
 		try {
-			List<Location> locs = m.locationsOfLine(line);
-			if (locs.size() > 0) {
-				Location loc = locs.get(0);
+			// if pc is already at breakpoint
+			if (curThread.frame(0).location().equals(loc)) {
+				print(HIT_BREAKPOINT, curThread, method, loc.lineNumber(), 0);
+			} else {
 				EventRequestManager reqManager = vm.eventRequestManager();
 				BreakpointRequest req = reqManager.createBreakpointRequest(loc);
 				req.enable();
 				countBreakpoints++;
 			}
-		} catch (Exception e) {
+		} catch (IncompatibleThreadStateException e) {
 			e.printStackTrace();
 		}
 	}
@@ -245,7 +260,6 @@ public class TextDebugger {
 		StringTokenizer st = new StringTokenizer(cmd, " ");
 
 		switch (st.nextToken()) {
-		// http://download.java.net/jdk8/docs/technotes/tools/windows/jdb.html
 		case "run":
 			run();
 			break;
@@ -262,75 +276,75 @@ public class TextDebugger {
 			throw new UnsupportedOperationException();
 
 		case "stop":
+			String className = null;
+			String methodName = null;
+			int lineNumber = -1;
+
 			switch (st.nextToken()) {
-			case "in":
-				// e.g. "stop in Test.hello"
-				final String className = st.nextToken(".").trim();
-				final String methodName = st.nextToken().trim();
+			case "in": // e.g. "stop in MyClass.main"
+				className = st.nextToken(".").trim();
+				methodName = st.nextToken().trim();
+				break;
 
-				try {
-					if (isLoaded()) {
-						// class is already loaded
-						// find class
-						final List<ReferenceType> classes = vm
-								.classesByName(className);
+			case "at": // e.g. "stop at MyClass:22"
+				className = st.nextToken(":").trim();
+				lineNumber = Integer.parseInt(st.nextToken());
+				break;
 
-						assert classes.size() == 1;
-						final ReferenceType clazz = classes.get(0);
+			default:
+				throw new UnsupportedOperationException();
+			}
 
-						// find method
+			try {
+				// if VM is already loaded
+				if (isLoaded()) {
+
+					// find class
+					final List<ReferenceType> classes = vm
+							.classesByName(className);
+
+					assert classes.size() == 1;
+					final ReferenceType clazz = classes.get(0);
+
+					if (methodName == null) {
+						// find method from line number
+						assert lineNumber != -1;
+
+						// find location
+						final List<Location> locs = clazz
+								.locationsOfLine(lineNumber);
+						assert locs.size() == 1;
+						setBreakpoint(locs.get(0));
+
+					} else {
+						// find method from method name
+						assert methodName != null;
+
 						final List<Method> methods = clazz
 								.methodsByName(methodName);
 						assert methods.size() <= 1;
+
 						if (methods.size() == 1) {
-							final Method method = methods.get(0);
+							Method method = methods.get(0);
 
 							// get first executable line
 							final List<Location> locs = method
 									.allLineLocations();
 							assert locs.size() > 0;
-							final Location loc = locs.get(0);
-
-							System.out.println("Set breakpoint in '" + method
-									+ "' at line " + loc.lineNumber());
-
-							// if pc is already at breakpoint
-							if (curThread.frame(0).location().equals(loc)) {
-								System.out.printf("Breakpoint hit: \"thread="
-										+ "%s\", %s, line=%d bci=%d\n",
-										curThread, method, loc.lineNumber(), 0);
-
-								// vm.suspend();
-							} else {
-								setBreakpoint(method, loc.lineNumber());
-							}
+							setBreakpoint(locs.get(0));
 						} else {
-							System.out
-									.println("Unable to set deferred breakpoint "
-											+ className
-											+ "."
-											+ methodName
-											+ " : No method "
-											+ methodName
-											+ " in " + className);
+							Message.print(Message.NO_METHOD, className,
+									methodName, methodName, className);
 						}
-
-					} else {
-						// class is not yet loaded
-						System.out.println("Deferring breakpoint " + className
-								+ "." + methodName + ".");
-						System.out
-								.println("It will be set after the class is loaded.");
-						pendingOperations.add(cmd);
 					}
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-				break;
 
-			case "at":
-			default:
-				throw new UnsupportedOperationException();
+				} else {
+					// class is not yet loaded
+					print(DEFER_BREAKPOINT, className, methodName);
+					pendingOperations.add(cmd);
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
 			break;
 
@@ -377,7 +391,7 @@ public class TextDebugger {
 		int retValue = 0;
 		String cmd;
 
-		while (true) {
+		while (!terminate) {
 			try {
 				System.out.print("> ");
 				cmd = in.readLine().trim();
