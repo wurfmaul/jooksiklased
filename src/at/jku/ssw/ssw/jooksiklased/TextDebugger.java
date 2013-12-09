@@ -5,21 +5,32 @@ import static at.jku.ssw.ssw.jooksiklased.Message.*;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Queue;
 import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import com.sun.jdi.AbsentInformationException;
 import com.sun.jdi.ArrayReference;
+import com.sun.jdi.BooleanValue;
 import com.sun.jdi.Bootstrap;
+import com.sun.jdi.ByteValue;
+import com.sun.jdi.CharValue;
+import com.sun.jdi.ClassObjectReference;
+import com.sun.jdi.DoubleValue;
+import com.sun.jdi.FloatValue;
 import com.sun.jdi.IncompatibleThreadStateException;
 import com.sun.jdi.IntegerValue;
 import com.sun.jdi.LocalVariable;
 import com.sun.jdi.Location;
+import com.sun.jdi.LongValue;
 import com.sun.jdi.Method;
 import com.sun.jdi.ReferenceType;
+import com.sun.jdi.ShortValue;
 import com.sun.jdi.StackFrame;
 import com.sun.jdi.StringReference;
 import com.sun.jdi.ThreadReference;
@@ -42,6 +53,7 @@ import com.sun.jdi.request.EventRequestManager;
 import com.sun.jdi.request.MethodEntryRequest;
 import com.sun.jdi.request.StepRequest;
 import com.sun.jdi.request.VMDeathRequest;
+import com.sun.tools.jdi.ObjectReferenceImpl;
 
 @SuppressWarnings("unused")
 public class TextDebugger {
@@ -55,8 +67,10 @@ public class TextDebugger {
 	private final EventRequestManager reqManager;
 
 	private ThreadReference curThread;
-	private int countBreakpoints = 0;
+	private int setBreakpoints = 0;
+	private int hitBreakpoints = 0;
 	private boolean terminate = false;
+	private String debuggee = null;
 
 	private TextDebugger() throws IOException,
 			IllegalConnectorArgumentsException {
@@ -105,7 +119,7 @@ public class TextDebugger {
 		}
 
 		// if there are no more breakpoints
-		if (countBreakpoints == 0) {
+		if (setBreakpoints == hitBreakpoints) {
 			vm.dispose();
 		} else {
 			curThread.resume();
@@ -120,22 +134,21 @@ public class TextDebugger {
 				EventIterator iter = events.eventIterator();
 				while (iter.hasNext()) {
 					Event e = iter.nextEvent();
-					System.out.println(e);
-
 					if (e instanceof BreakpointEvent) {
 						vm.suspend();
 						BreakpointEvent be = (BreakpointEvent) e;
 
-						print(HIT_BREAKPOINT, be.thread(), be.location()
+						print(HIT_BREAKPOINT, be.thread().name(), be.location()
 								.method(), be.location().lineNumber(), 0);
 
-						// printVars(be.thread().frame(0));
-						countBreakpoints--;
+						hitBreakpoints++;
 						return;
 					} else if (e instanceof VMDisconnectEvent) {
+						// tell UI to terminate
 						terminate = true;
 					} else {
-						System.out.println(e);
+						// unclassified event
+						// System.out.println(e);
 						vm.resume();
 					}
 				}
@@ -158,13 +171,13 @@ public class TextDebugger {
 
 		try {
 			MethodEntryRequest req = reqManager.createMethodEntryRequest();
-			req.addClassFilter("Test");
+			if (debuggee != null)
+				req.addClassFilter(debuggee);
 			req.addThreadFilter(curThread);
 			req.enable();
 
 			vm.resume();
 			curThread.resume();
-
 			EventQueue q = vm.eventQueue();
 
 			while (true) {
@@ -179,12 +192,13 @@ public class TextDebugger {
 						}
 						return;
 					} else {
+						// System.out.println(e);
 						vm.resume();
 						curThread.resume();
 					}
 				}
 			}
-		} catch (Exception e) {
+		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
 	}
@@ -194,15 +208,17 @@ public class TextDebugger {
 		print(SET_BREAKPOINT, method, loc.lineNumber());
 
 		try {
-			// if pc is already at breakpoint
 			if (curThread.frame(0).location().equals(loc)) {
-				print(HIT_BREAKPOINT, curThread, method, loc.lineNumber(), 0);
+				// pc is already at breakpoint
+				print(HIT_BREAKPOINT, curThread.name(), method,
+						loc.lineNumber(), 0);
+				hitBreakpoints++;
 			} else {
 				EventRequestManager reqManager = vm.eventRequestManager();
 				BreakpointRequest req = reqManager.createBreakpointRequest(loc);
 				req.enable();
-				countBreakpoints++;
 			}
+			setBreakpoints++;
 		} catch (IncompatibleThreadStateException e) {
 			e.printStackTrace();
 		}
@@ -222,33 +238,44 @@ public class TextDebugger {
 		}
 	}
 
-	private static void printVars(StackFrame frame) {
-		try {
-			Iterator<LocalVariable> iter = frame.visibleVariables().iterator();
-			while (iter.hasNext()) {
-				LocalVariable v = (LocalVariable) iter.next();
-				System.out.print(v.name() + ": " + v.type().name() + " = ");
-				printValue(frame.getValue(v));
-				System.out.println();
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-	}
-
-	private static void printValue(Value val) {
-		if (val instanceof IntegerValue) {
-			System.out.print(((IntegerValue) val).value() + " ");
+	private static String valueToString(Value val) {
+		if (val instanceof BooleanValue) {
+			return ((BooleanValue) val).value() + "";
+		} else if (val instanceof ByteValue) {
+			return ((ByteValue) val).value() + "";
+		} else if (val instanceof CharValue) {
+			return ((CharValue) val).value() + "";
+		} else if (val instanceof DoubleValue) {
+			return ((DoubleValue) val).value() + "";
+		} else if (val instanceof FloatValue) {
+			return ((FloatValue) val).value() + "";
+		} else if (val instanceof IntegerValue) {
+			return ((IntegerValue) val).value() + "";
+		} else if (val instanceof LongValue) {
+			return ((LongValue) val).value() + "";
+		} else if (val instanceof ShortValue) {
+			return ((ShortValue) val).value() + "";
 		} else if (val instanceof StringReference) {
-			System.out.print(((StringReference) val).value() + " ");
+			return ((StringReference) val).value() + "";
 		} else if (val instanceof ArrayReference) {
-			Iterator<Value> iter = ((ArrayReference) val).getValues()
-					.iterator();
-			while (iter.hasNext()) {
-				printValue((Value) iter.next());
+			final StringBuilder sb = new StringBuilder();
+			final ArrayReference arr = (ArrayReference) val;
+			sb.append("instance of " + arr.type().name() + "(id="
+					+ arr.uniqueID() + ")\n  +-> [");
+			Iterator<Value> iter = arr.getValues().iterator();
+			while(iter.hasNext()) {
+				sb.append(valueToString(iter.next()));
+				if (iter.hasNext())
+					sb.append(", ");
 			}
+			sb.append("]");
+			return sb.toString();
+		} else if (val instanceof ObjectReferenceImpl) {
+			final ObjectReferenceImpl obj = (ObjectReferenceImpl) val;
+			return "instance of " + obj.type().name() + "(id=" + obj.uniqueID()
+					+ ")";
 		} else {
-			throw new UnsupportedOperationException();
+			throw new UnsupportedOperationException(val.getClass().getName());
 		}
 	}
 
@@ -258,17 +285,53 @@ public class TextDebugger {
 
 	private void perform(final String cmd) throws InterruptedException {
 		StringTokenizer st = new StringTokenizer(cmd, " ");
+		String className = null;
+		String methodName = null;
+		int lineNumber = -1;
 
 		switch (st.nextToken()) {
 		case "run":
 			run();
-			break;
+			// fall through unless there were no breakpoints hit
+			if (hitBreakpoints > 0)
+				break;
 
 		case "cont":
 			cont();
 			break;
 
 		case "print":
+			try {
+				className = st.nextToken(".");
+				StackFrame curFrame = curThread.frame(0);
+				if (st.hasMoreTokens()) {
+					// fields
+					final String varName = st.nextToken().trim();
+					for (LocalVariable var : curFrame.visibleVariables()) {
+						String value = valueToString(curFrame.getValue(var));
+						print(VAR, var.typeName(), var.name(), value);
+					}
+
+				} else {
+					// locals
+					final String varName = className.trim();
+					LocalVariable var = curFrame.visibleVariableByName(varName);
+					if (var != null) {
+						String value = valueToString(curFrame.getValue(var));
+						print(VAR, var.typeName(), var.name(), value);
+					} else {
+						print(UNKNOWN, varName);
+					}
+				}
+			} catch (AbsentInformationException e) {
+				e.printStackTrace();
+			} catch (IncompatibleThreadStateException e) {
+				e.printStackTrace();
+			} catch (NoSuchElementException e) {
+				print(INVALID_CMD, cmd);
+			}
+			break;
+		case "locals":
 		case "dump":
 		case "threads":
 		case "thread":
@@ -276,26 +339,23 @@ public class TextDebugger {
 			throw new UnsupportedOperationException();
 
 		case "stop":
-			String className = null;
-			String methodName = null;
-			int lineNumber = -1;
-
-			switch (st.nextToken()) {
-			case "in": // e.g. "stop in MyClass.main"
-				className = st.nextToken(".").trim();
-				methodName = st.nextToken().trim();
-				break;
-
-			case "at": // e.g. "stop at MyClass:22"
-				className = st.nextToken(":").trim();
-				lineNumber = Integer.parseInt(st.nextToken());
-				break;
-
-			default:
-				throw new UnsupportedOperationException();
-			}
 
 			try {
+				switch (st.nextToken()) {
+				case "in": // e.g. "stop in MyClass.main"
+					className = st.nextToken(".").trim();
+					methodName = st.nextToken().trim();
+					break;
+
+				case "at": // e.g. "stop at MyClass:22"
+					className = st.nextToken(":").trim();
+					lineNumber = Integer.parseInt(st.nextToken());
+					break;
+
+				default:
+					throw new UnsupportedOperationException();
+				}
+
 				// if VM is already loaded
 				if (isLoaded()) {
 
@@ -303,7 +363,9 @@ public class TextDebugger {
 					final List<ReferenceType> classes = vm
 							.classesByName(className);
 
-					assert classes.size() == 1;
+					assert classes.size() > 0 : className + " not found";
+					assert classes.size() <= 1;
+
 					final ReferenceType clazz = classes.get(0);
 
 					if (methodName == null) {
@@ -340,11 +402,17 @@ public class TextDebugger {
 
 				} else {
 					// class is not yet loaded
-					print(DEFER_BREAKPOINT, className, methodName);
+					if (methodName == null)
+						print(DEFER_BREAKPOINT_LOC, className, lineNumber);
+					else
+						print(DEFER_BREAKPOINT, className, methodName);
+
 					pendingOperations.add(cmd);
 				}
-			} catch (Exception e) {
+			} catch (AbsentInformationException e) {
 				e.printStackTrace();
+			} catch (NoSuchElementException e) {
+				print(INVALID_CMD, cmd);
 			}
 			break;
 
@@ -362,6 +430,9 @@ public class TextDebugger {
 			System.out.print("thread / where / stop / clear / step / ");
 			System.out.println("next / catch / ignore");
 		}
+
+		if (className != null)
+			debuggee = className.trim();
 
 		if (st.hasMoreTokens()) {
 			System.err.print("Warning: No use for arguments: ");
@@ -419,7 +490,6 @@ public class TextDebugger {
 	public static void main(String[] arguments) {
 		try {
 			TextDebugger debugger = new TextDebugger();
-			// debugger.methodEntry();
 			debugger.ui();
 		} catch (IOException | IllegalConnectorArgumentsException e) {
 			e.printStackTrace();
