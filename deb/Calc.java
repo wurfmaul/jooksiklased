@@ -9,7 +9,6 @@ class Calc {
 	}
 	
 	public static void main(String[] args) {
-		System.out.println("Let's calculate!");
 		Calc c = new Calc();
 		int tmp = c.calc(2f);
 		boolean cmp = c.cmp(tmp);
@@ -27,5 +26,4 @@ class Calc {
 		tmp -= d;
 		return (int) tmp;
 	}
-	
 }

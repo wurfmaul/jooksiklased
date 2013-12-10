@@ -9,8 +9,12 @@ public enum Message {
 	VM_RUNNING("VM already running. Use 'cont' to continue after events."), 
 	VM_NOT_RUNNING("Command 'cont' is not valid until the VM is started with the 'run' command"), 
 	EXIT("The application exited."), UNKNOWN("Name unknown: %s"), 
-	VAR("%s %s = %s"), 
-	INVALID_CMD("Command not valid: '%s'");
+	VAR("%s %s = %s"),
+	FIELD("%s %s"),
+	INVALID_CMD("Command not valid: '%s'"),
+	VM_ERROR("%s"),
+	USAGE("run / cont / print / dump / threads / thread / where / stop / clear / step / next / catch / ignore"),
+	TOO_MANY_ARGS("No use for arguments: %s");
 
 	private String msg;
 
@@ -24,5 +28,10 @@ public enum Message {
 
 	static void error(Message msg, Object... args) {
 		System.err.printf(msg.msg + "\n", args);
+	}
+	
+	@Override
+	public String toString() {
+		return msg;
 	}
 }

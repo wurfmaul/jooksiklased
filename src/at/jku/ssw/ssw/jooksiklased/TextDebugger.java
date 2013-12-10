@@ -3,12 +3,17 @@ package at.jku.ssw.ssw.jooksiklased;
 import static at.jku.ssw.ssw.jooksiklased.Message.*;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Queue;
 import java.util.StringTokenizer;
@@ -22,6 +27,7 @@ import com.sun.jdi.ByteValue;
 import com.sun.jdi.CharValue;
 import com.sun.jdi.ClassObjectReference;
 import com.sun.jdi.DoubleValue;
+import com.sun.jdi.Field;
 import com.sun.jdi.FloatValue;
 import com.sun.jdi.IncompatibleThreadStateException;
 import com.sun.jdi.IntegerValue;
@@ -39,8 +45,10 @@ import com.sun.jdi.Value;
 import com.sun.jdi.VirtualMachine;
 import com.sun.jdi.connect.AttachingConnector;
 import com.sun.jdi.connect.Connector;
+import com.sun.jdi.connect.LaunchingConnector;
 import com.sun.jdi.connect.Connector.Argument;
 import com.sun.jdi.connect.IllegalConnectorArgumentsException;
+import com.sun.jdi.connect.VMStartException;
 import com.sun.jdi.event.BreakpointEvent;
 import com.sun.jdi.event.Event;
 import com.sun.jdi.event.EventIterator;
@@ -62,21 +70,25 @@ public class TextDebugger {
 	 * can be stored in this list in order to perform immediately after class
 	 * loading.
 	 */
-	private final Queue<String> pendingOperations;
 	private final VirtualMachine vm;
-	private final EventRequestManager reqManager;
 
+	private Queue<String> pendingOperations;
+	private EventRequestManager reqManager;
 	private ThreadReference curThread;
 	private int setBreakpoints = 0;
 	private int hitBreakpoints = 0;
+	private Location firstBreakpoint = null;
 	private boolean terminate = false;
 	private String debuggee = null;
 
-	private TextDebugger() throws IOException,
+	/**
+	 * The attaching debugger
+	 * 
+	 * @throws IOException
+	 * @throws IllegalConnectorArgumentsException
+	 */
+	public TextDebugger() throws IOException,
 			IllegalConnectorArgumentsException {
-
-		// make space for pending operations
-		pendingOperations = new ConcurrentLinkedQueue<>();
 
 		// find attaching connector
 		AttachingConnector con = null;
@@ -90,29 +102,74 @@ public class TextDebugger {
 
 		// configure connector
 		Map<String, Argument> args = con.defaultArguments();
-		((Connector.Argument) args.get("port")).setValue("8000");
+		((Argument) args.get("port")).setValue("8000");
 
 		// Establish VirtualMachine
 		vm = con.attach(args);
 
-		// Establish Request Manager
-		reqManager = vm.eventRequestManager();
+		init();
+	}
 
-		vm.suspend();
+	/**
+	 * The launching debugger
+	 * 
+	 * @param debuggee
+	 * @throws IOException
+	 * @throws IllegalConnectorArgumentsException
+	 * @throws VMStartException
+	 */
+	public TextDebugger(final String debuggee) throws IOException,
+			IllegalConnectorArgumentsException, VMStartException {
 
-		// find current thread
-		for (ThreadReference t : vm.allThreads()) {
-			if (t.name().equals("main")) {
-				curThread = t;
-				break;
+		this.debuggee = debuggee;
+
+		// establish connection
+		LaunchingConnector con = Bootstrap.virtualMachineManager()
+				.defaultConnector();
+		Map<String, Argument> args = con.defaultArguments();
+		((Argument) args.get("main")).setValue(debuggee);
+		vm = con.launch(args);
+
+		init();
+	}
+
+	private void setBreakpoint(Location loc) {
+		final Method method = loc.method();
+		print(SET_BREAKPOINT, method, loc.lineNumber());
+
+		try {
+			if (curThread.frame(0).location().equals(loc)) {
+				// pc is already at breakpoint
+				firstBreakpoint = loc;
+				hitBreakpoints++;
 			}
+			EventRequestManager reqManager = vm.eventRequestManager();
+			BreakpointRequest req = reqManager.createBreakpointRequest(loc);
+			req.enable();
+			setBreakpoints++;
+		} catch (IncompatibleThreadStateException e) {
+			e.printStackTrace();
+		}
+	}
+
+	private void stepOver(ThreadReference thread) {
+		try {
+			StepRequest req = reqManager.createStepRequest(thread,
+					StepRequest.STEP_LINE, StepRequest.STEP_OVER);
+			req.addClassFilter("*Test"); // create step requests only in class
+											// Test
+			req.addCountFilter(1); // create step event after 1 step
+			req.enable();
+			vm.resume();
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 	}
 
 	/**
 	 * This method continues to next breakpoint if the VM is started.
 	 */
-	private void cont() {
+	private void performCont() {
 		if (!isLoaded()) {
 			print(VM_NOT_RUNNING);
 			return;
@@ -160,10 +217,55 @@ public class TextDebugger {
 		}
 	}
 
+	private void performFields(final String className) {
+		final ReferenceType clazz = findClass(className);
+		for (Field f : clazz.visibleFields()) {
+			if (f.isStatic()) {
+				String value = valueToString(clazz.getValue(f));
+				print(VAR, f.typeName(), f.name(), value);
+			} else {
+				print(FIELD, f.typeName(), f.name());
+			}
+		}
+	}
+
+	private void performLocals() throws IncompatibleThreadStateException,
+			AbsentInformationException {
+
+		final StackFrame curFrame = curThread.frame(0);
+		for (LocalVariable var : curFrame.visibleVariables()) {
+			String value = valueToString(curFrame.getValue(var));
+			print(VAR, var.typeName(), var.name(), value);
+		}
+	}
+
+	private void performPrintField(final String className,
+			final String fieldName) {
+		
+		ReferenceType clazz = findClass(className);
+		Field f = clazz.fieldByName(fieldName);
+		if(f.isStatic())
+			print(VAR, f.typeName(), f.name(), clazz.getValue(f));
+		// TODO else!
+	}
+
+	private void performPrintLocal(final String varName)
+			throws IncompatibleThreadStateException, AbsentInformationException {
+
+		final StackFrame curFrame = curThread.frame(0);
+		final LocalVariable var = curFrame.visibleVariableByName(varName);
+		if (var != null) {
+			final String value = valueToString(curFrame.getValue(var));
+			print(VAR, var.typeName(), var.name(), value);
+		} else {
+			print(UNKNOWN, varName);
+		}
+	}
+
 	/**
 	 * This method starts the VM and stops at first method entry.
 	 */
-	private void run() {
+	private void performRun() {
 		if (isLoaded()) {
 			print(VM_RUNNING);
 			return;
@@ -201,41 +303,145 @@ public class TextDebugger {
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
+
+		// fall through unless there were no breakpoints hit
+		if (firstBreakpoint != null) {
+			print(HIT_BREAKPOINT, curThread.name(), firstBreakpoint.method(),
+					firstBreakpoint.lineNumber(), 0);
+		} else {
+			performCont();
+		}
 	}
 
-	private void setBreakpoint(Location loc) {
-		final Method method = loc.method();
-		print(SET_BREAKPOINT, method, loc.lineNumber());
+	/**
+	 * Find location by class name and method name and set breakpoint.
+	 * 
+	 * @param className
+	 * @param lineNumber
+	 */
+	private void performStop(String className, int lineNumber) {
+		assert lineNumber != -1;
 
+		// find location
 		try {
-			if (curThread.frame(0).location().equals(loc)) {
-				// pc is already at breakpoint
-				print(HIT_BREAKPOINT, curThread.name(), method,
-						loc.lineNumber(), 0);
-				hitBreakpoints++;
-			} else {
-				EventRequestManager reqManager = vm.eventRequestManager();
-				BreakpointRequest req = reqManager.createBreakpointRequest(loc);
-				req.enable();
+			List<Location> locs = findClass(className).locationsOfLine(
+					lineNumber);
+			assert locs.size() == 1;
+			setBreakpoint(locs.get(0));
+		} catch (AbsentInformationException e) {
+			e.printStackTrace(); // EMPTY_CLASS ?
+		}
+	}
+
+	/**
+	 * Find location by class name and line number and set breakpoint.
+	 * 
+	 * @param className
+	 * @param methodName
+	 */
+	private void performStop(String className, String methodName) {
+		assert methodName != null;
+
+		final List<Method> methods = findClass(className).methodsByName(
+				methodName);
+		assert methods.size() <= 1;
+
+		if (methods.size() == 1) {
+			Method method = methods.get(0);
+
+			// get first executable line
+			try {
+				List<Location> locs = method.allLineLocations();
+				assert locs.size() > 0;
+				setBreakpoint(locs.get(0));
+			} catch (AbsentInformationException e) {
+				e.printStackTrace(); // METHOD_EMPTY ?
 			}
-			setBreakpoints++;
-		} catch (IncompatibleThreadStateException e) {
-			e.printStackTrace();
+		} else {
+			Message.print(Message.NO_METHOD, className, methodName, methodName,
+					className);
 		}
 	}
 
-	private void stepOver(ThreadReference thread) {
+	/**
+	 * True if VM is loaded, false otherwise.
+	 */
+	private boolean isLoaded() {
 		try {
-			StepRequest req = reqManager.createStepRequest(thread,
-					StepRequest.STEP_LINE, StepRequest.STEP_OVER);
-			req.addClassFilter("*Test"); // create step requests only in class
-											// Test
-			req.addCountFilter(1); // create step event after 1 step
-			req.enable();
-			vm.resume();
-		} catch (Exception e) {
-			e.printStackTrace();
+			return curThread.frameCount() > 0;
+		} catch (IncompatibleThreadStateException e) {
+			System.err.println("isLoaded() threw "
+					+ e.getClass().getSimpleName());
 		}
+		return false;
+	}
+
+	private ReferenceType findClass(final String className) {
+		final List<ReferenceType> classes = vm.classesByName(className);
+
+		assert classes.size() > 0 : className + " not found";
+		assert classes.size() <= 1;
+
+		return classes.get(0);
+	}
+
+	/**
+	 * Initializes fields that re necessary for both constructors.
+	 */
+	private void init() {
+		// make space for pending operations
+		pendingOperations = new ConcurrentLinkedQueue<>();
+
+		// Establish Request Manager
+		reqManager = vm.eventRequestManager();
+
+		// redirect IO streams
+		Process proc = vm.process();
+		new Redirection(proc.getErrorStream(), System.err).start();
+		new Redirection(proc.getInputStream(), System.out).start();
+
+		vm.suspend();
+
+		// find current thread
+		for (ThreadReference t : vm.allThreads()) {
+			if (t.name().equals("main")) {
+				curThread = t;
+				break;
+			}
+		}
+	}
+
+	private int ui() {
+		final BufferedReader in = new BufferedReader(new InputStreamReader(
+				System.in));
+		int retValue = 0;
+		String cmd;
+
+		while (!terminate) {
+			try {
+				System.out.print("> ");
+				cmd = in.readLine().trim();
+				switch (cmd) {
+				case "quit":
+				case "exit":
+				case "q":
+					vm.dispose();
+					return 0;
+				default:
+					perform(cmd);
+				}
+			} catch (IOException e) {
+				retValue = -1;
+				break;
+			} catch (VMDisconnectedException e) {
+				break;
+			}
+		}
+		try {
+			in.close();
+		} catch (IOException e) {
+		}
+		return retValue;
 	}
 
 	private static String valueToString(Value val) {
@@ -263,7 +469,7 @@ public class TextDebugger {
 			sb.append("instance of " + arr.type().name() + "(id="
 					+ arr.uniqueID() + ")\n  +-> [");
 			Iterator<Value> iter = arr.getValues().iterator();
-			while(iter.hasNext()) {
+			while (iter.hasNext()) {
 				sb.append(valueToString(iter.next()));
 				if (iter.hasNext())
 					sb.append(", ");
@@ -279,219 +485,117 @@ public class TextDebugger {
 		}
 	}
 
-	private static void printLocation(Location loc) {
-		System.out.println(loc.lineNumber() + ", " + loc.codeIndex());
-	}
-
-	private void perform(final String cmd) throws InterruptedException {
-		StringTokenizer st = new StringTokenizer(cmd, " ");
+	public void perform(final String cmd) {
+		StringTokenizer st = new StringTokenizer(cmd, " .");
 		String className = null;
 		String methodName = null;
 		int lineNumber = -1;
+		StackFrame curFrame;
 
-		switch (st.nextToken()) {
-		case "run":
-			run();
-			// fall through unless there were no breakpoints hit
-			if (hitBreakpoints > 0)
+		try {
+			switch (st.nextToken()) {
+			case "run":
+				performRun();
 				break;
 
-		case "cont":
-			cont();
-			break;
+			case "cont":
+				performCont();
+				break;
 
-		case "print":
-			try {
-				className = st.nextToken(".");
-				StackFrame curFrame = curThread.frame(0);
+			case "print":
+				className = st.nextToken();
 				if (st.hasMoreTokens()) {
-					// fields
-					final String varName = st.nextToken().trim();
-					for (LocalVariable var : curFrame.visibleVariables()) {
-						String value = valueToString(curFrame.getValue(var));
-						print(VAR, var.typeName(), var.name(), value);
-					}
-
+					performPrintField(className.trim(), st.nextToken().trim());
 				} else {
-					// locals
-					final String varName = className.trim();
-					LocalVariable var = curFrame.visibleVariableByName(varName);
-					if (var != null) {
-						String value = valueToString(curFrame.getValue(var));
-						print(VAR, var.typeName(), var.name(), value);
-					} else {
-						print(UNKNOWN, varName);
-					}
+					performPrintLocal(className.trim());
 				}
-			} catch (AbsentInformationException e) {
-				e.printStackTrace();
-			} catch (IncompatibleThreadStateException e) {
-				e.printStackTrace();
-			} catch (NoSuchElementException e) {
-				print(INVALID_CMD, cmd);
-			}
-			break;
-		case "locals":
-		case "dump":
-		case "threads":
-		case "thread":
-		case "where":
-			throw new UnsupportedOperationException();
+				break;
 
-		case "stop":
+			case "locals":
+				performLocals();
+				break;
 
-			try {
+			case "fields":
+				performFields(st.nextToken().trim());
+				break;
+
+			case "dump":
+			case "threads":
+			case "thread":
+			case "where":
+				throw new UnsupportedOperationException();
+
+			case "stop":
 				switch (st.nextToken()) {
 				case "in": // e.g. "stop in MyClass.main"
-					className = st.nextToken(".").trim();
+					className = st.nextToken().trim();
 					methodName = st.nextToken().trim();
+					if (isLoaded()) {
+						performStop(className, methodName);
+					} else {
+						print(DEFER_BREAKPOINT, className, methodName);
+						pendingOperations.add(cmd);
+					}
 					break;
 
 				case "at": // e.g. "stop at MyClass:22"
 					className = st.nextToken(":").trim();
 					lineNumber = Integer.parseInt(st.nextToken());
+					if (isLoaded()) {
+						performStop(className, lineNumber);
+					} else {
+						print(DEFER_BREAKPOINT_LOC, className, lineNumber);
+						pendingOperations.add(cmd);
+					}
 					break;
 
 				default:
 					throw new UnsupportedOperationException();
 				}
+				break;
 
-				// if VM is already loaded
-				if (isLoaded()) {
+			case "clear":
+			case "step":
+			case "next":
+			case "catch":
+			case "ignore":
+				throw new UnsupportedOperationException("catch / ignore");
 
-					// find class
-					final List<ReferenceType> classes = vm
-							.classesByName(className);
-
-					assert classes.size() > 0 : className + " not found";
-					assert classes.size() <= 1;
-
-					final ReferenceType clazz = classes.get(0);
-
-					if (methodName == null) {
-						// find method from line number
-						assert lineNumber != -1;
-
-						// find location
-						final List<Location> locs = clazz
-								.locationsOfLine(lineNumber);
-						assert locs.size() == 1;
-						setBreakpoint(locs.get(0));
-
-					} else {
-						// find method from method name
-						assert methodName != null;
-
-						final List<Method> methods = clazz
-								.methodsByName(methodName);
-						assert methods.size() <= 1;
-
-						if (methods.size() == 1) {
-							Method method = methods.get(0);
-
-							// get first executable line
-							final List<Location> locs = method
-									.allLineLocations();
-							assert locs.size() > 0;
-							setBreakpoint(locs.get(0));
-						} else {
-							Message.print(Message.NO_METHOD, className,
-									methodName, methodName, className);
-						}
-					}
-
-				} else {
-					// class is not yet loaded
-					if (methodName == null)
-						print(DEFER_BREAKPOINT_LOC, className, lineNumber);
-					else
-						print(DEFER_BREAKPOINT, className, methodName);
-
-					pendingOperations.add(cmd);
-				}
-			} catch (AbsentInformationException e) {
-				e.printStackTrace();
-			} catch (NoSuchElementException e) {
-				print(INVALID_CMD, cmd);
+			default:
+				print(USAGE);
 			}
-			break;
-
-		case "clear":
-		case "step":
-		case "next":
-		case "catch":
-		case "ignore":
-			throw new UnsupportedOperationException("catch / ignore");
-
-		default:
-			// TODO list of commands
-			System.out.println("Usage:");
-			System.out.print("run / cont / print / dump / threads / ");
-			System.out.print("thread / where / stop / clear / step / ");
-			System.out.println("next / catch / ignore");
+		} catch (AbsentInformationException e) {
+			e.printStackTrace();
+		} catch (IncompatibleThreadStateException e) {
+			e.printStackTrace();
+		} catch (NoSuchElementException e) {
+			print(INVALID_CMD, cmd);
 		}
 
 		if (className != null)
 			debuggee = className.trim();
 
 		if (st.hasMoreTokens()) {
-			System.err.print("Warning: No use for arguments: ");
-			System.err.print(st.nextToken());
-			while (st.hasMoreTokens())
-				System.err.print(", " + st.nextToken());
-			System.err.println();
-		}
-	}
-
-	/**
-	 * True if VM is loaded, false otherwise.
-	 */
-	private boolean isLoaded() {
-		try {
-			return curThread.frameCount() > 0;
-		} catch (IncompatibleThreadStateException e) {
-			System.err.println("isLoaded() threw "
-					+ e.getClass().getSimpleName());
-		}
-		return false;
-	}
-
-	private int ui() {
-		final BufferedReader in = new BufferedReader(new InputStreamReader(
-				System.in));
-		int retValue = 0;
-		String cmd;
-
-		while (!terminate) {
-			try {
-				System.out.print("> ");
-				cmd = in.readLine().trim();
-				switch (cmd) {
-				case "quit":
-				case "exit":
-				case "q":
-					vm.dispose();
-					return 0;
-				default:
-					perform(cmd);
-				}
-			} catch (IOException | InterruptedException e) {
-				retValue = -1;
-				break;
+			StringBuilder sb = new StringBuilder();
+			while (st.hasMoreTokens()) {
+				sb.append(st.nextToken());
+				sb.append(" ");
 			}
+			print(TOO_MANY_ARGS, sb.toString().trim());
 		}
-		try {
-			in.close();
-		} catch (IOException e) {
-		}
-		return retValue;
 	}
 
-	public static void main(String[] arguments) {
+	public static void main(String[] args) {
 		try {
-			TextDebugger debugger = new TextDebugger();
+			TextDebugger debugger;
+			if (args.length == 0)
+				debugger = new TextDebugger();
+			else
+				debugger = new TextDebugger(args[0]);
 			debugger.ui();
 		} catch (IOException | IllegalConnectorArgumentsException e) {
+			e.printStackTrace();
+		} catch (VMStartException e) {
 			e.printStackTrace();
 		}
 	}
