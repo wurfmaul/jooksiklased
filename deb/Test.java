@@ -1,14 +1,14 @@
 class Test {
 	
 	public static void main(String[] args) {
-		int i = 1;
+		int i = 5;
 		int j = i * 2;
-		System.out.println(j);
-		hello();
+		hello(j + 1);
 	}
 	
-	public static void hello() {
-		System.out.println("Hello World");
+	public static boolean hello(int l) {
+		boolean res = l == "Hello World".length(); 
+		return res;
 	}
 	
 }

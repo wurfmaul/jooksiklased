@@ -8,11 +8,11 @@ class Calc {
 		b = 13;
 	}
 	
+	@SuppressWarnings("unused")
 	public static void main(String[] args) {
 		Calc c = new Calc();
-		int tmp = c.calc(2f);
-		boolean cmp = c.cmp(tmp);
-		System.out.println("Test passed? " + cmp);
+		int tmp = c.calc(2f); // 42
+		boolean cmp = c.cmp(tmp); // true
 	}
 	
 	private boolean cmp(int val) {
@@ -21,9 +21,9 @@ class Calc {
 	}
 
 	public int calc(float val) {
-		double tmp = a + b;
-		tmp *= val;
-		tmp -= d;
-		return (int) tmp;
+		double tmp = a + b; // 25d
+		tmp *= val; // 50d
+		tmp -= d; // 42d
+		return (int) tmp; // 42
 	}
 }

@@ -9,6 +9,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -35,6 +36,8 @@ import com.sun.jdi.LocalVariable;
 import com.sun.jdi.Location;
 import com.sun.jdi.LongValue;
 import com.sun.jdi.Method;
+import com.sun.jdi.Mirror;
+import com.sun.jdi.ObjectReference;
 import com.sun.jdi.ReferenceType;
 import com.sun.jdi.ShortValue;
 import com.sun.jdi.StackFrame;
@@ -241,12 +244,13 @@ public class TextDebugger {
 
 	private void performPrintField(final String className,
 			final String fieldName) {
-		
+
 		ReferenceType clazz = findClass(className);
 		Field f = clazz.fieldByName(fieldName);
-		if(f.isStatic())
+		if (f.isStatic())
 			print(VAR, f.typeName(), f.name(), clazz.getValue(f));
-		// TODO else!
+		else
+			print(NO_FIELD, fieldName, className);
 	}
 
 	private void performPrintLocal(final String varName)
@@ -282,7 +286,9 @@ public class TextDebugger {
 			curThread.resume();
 			EventQueue q = vm.eventQueue();
 
-			while (true) {
+			boolean exit = false;
+
+			while (!exit) {
 				EventSet events = q.remove();
 				EventIterator iter = events.eventIterator();
 				while (iter.hasNext()) {
@@ -292,7 +298,8 @@ public class TextDebugger {
 						while (pendingOperations.size() > 0) {
 							perform(pendingOperations.remove());
 						}
-						return;
+						exit = true;
+						break;
 					} else {
 						// System.out.println(e);
 						vm.resume();
@@ -304,7 +311,6 @@ public class TextDebugger {
 			e.printStackTrace();
 		}
 
-		// fall through unless there were no breakpoints hit
 		if (firstBreakpoint != null) {
 			print(HIT_BREAKPOINT, curThread.name(), firstBreakpoint.method(),
 					firstBreakpoint.lineNumber(), 0);
@@ -370,10 +376,8 @@ public class TextDebugger {
 		try {
 			return curThread.frameCount() > 0;
 		} catch (IncompatibleThreadStateException e) {
-			System.err.println("isLoaded() threw "
-					+ e.getClass().getSimpleName());
 		}
-		return false;
+		return true;
 	}
 
 	private ReferenceType findClass(final String className) {
@@ -464,17 +468,19 @@ public class TextDebugger {
 		} else if (val instanceof StringReference) {
 			return ((StringReference) val).value() + "";
 		} else if (val instanceof ArrayReference) {
-			final StringBuilder sb = new StringBuilder();
 			final ArrayReference arr = (ArrayReference) val;
-			sb.append("instance of " + arr.type().name() + "(id="
-					+ arr.uniqueID() + ")\n  +-> [");
-			Iterator<Value> iter = arr.getValues().iterator();
-			while (iter.hasNext()) {
-				sb.append(valueToString(iter.next()));
-				if (iter.hasNext())
-					sb.append(", ");
-			}
-			sb.append("]");
+			final String type = arr.type().name();
+			final StringBuilder sb = new StringBuilder();
+			sb.append("instance of " + type + "(id=" + arr.uniqueID() + ")");
+			// print elements
+//			sb.append("\n  +-> [");
+//			Iterator<Value> iter = arr.getValues().iterator();
+//			while (iter.hasNext()) {
+//				sb.append(valueToString(iter.next()));
+//				if (iter.hasNext())
+//					sb.append(", ");
+//			}
+//			sb.append("]");
 			return sb.toString();
 		} else if (val instanceof ObjectReferenceImpl) {
 			final ObjectReferenceImpl obj = (ObjectReferenceImpl) val;
