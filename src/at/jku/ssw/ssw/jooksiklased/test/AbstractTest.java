@@ -21,7 +21,7 @@ import com.sun.jdi.connect.VMStartException;
 public abstract class AbstractTest {
 	private static final String KEY_ID_OPEN = "(id=";
 	private static final String KEY_ID_CLOSE = ")";
-
+	
 	protected TextDebugger debugger;
 	protected PrintStream backup;
 	protected ByteArrayOutputStream out;

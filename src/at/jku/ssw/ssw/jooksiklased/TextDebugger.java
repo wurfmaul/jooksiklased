@@ -242,6 +242,26 @@ public class TextDebugger {
 		}
 	}
 
+	private void performPrintBreakpoints() {
+		final StringBuilder sb = new StringBuilder();
+		
+		final Iterator<BreakpointRequest> iter = reqManager.breakpointRequests().iterator();
+		while (iter.hasNext()) {
+			final Location loc = iter.next().location();
+			sb.append("\t");
+			sb.append(loc.method().declaringType().name());
+			sb.append(".");
+			sb.append(loc.method().name());
+			sb.append(": ");
+			sb.append(loc.lineNumber());
+			if (iter.hasNext()) {
+				sb.append("\n");
+			}
+		}
+		
+		print(LIST_BREAKPOINTS, sb.toString());
+	}
+
 	private void performPrintField(final String className,
 			final String fieldName, final boolean dump) {
 
@@ -572,38 +592,40 @@ public class TextDebugger {
 				}
 				break;
 
-			case "threads":
-			case "thread":
-			case "where":
-				throw new UnsupportedOperationException();
-
 			case "stop":
-				switch (st.nextToken()) {
-				case "in": // e.g. "stop in MyClass.main"
-					className = st.nextToken().trim();
-					methodName = st.nextToken().trim();
-					if (isLoaded()) {
-						performStop(className, methodName);
-					} else {
-						print(DEFER_BREAKPOINT, className, methodName);
-						pendingOperations.add(cmd);
+				if (st.hasMoreTokens()) {
+					// set new breakpoint
+					switch (st.nextToken()) {
+					case "in": // e.g. "stop in MyClass.main"
+						className = st.nextToken().trim();
+						methodName = st.nextToken().trim();
+						if (isLoaded()) {
+							performStop(className, methodName);
+						} else {
+							print(DEFER_BREAKPOINT, className, methodName);
+							pendingOperations.add(cmd);
+						}
+						break;
+	
+					case "at": // e.g. "stop at MyClass:22"
+						className = st.nextToken(":").trim();
+						lineNumber = Integer.parseInt(st.nextToken());
+						if (isLoaded()) {
+							performStop(className, lineNumber);
+						} else {
+							print(DEFER_BREAKPOINT_LOC, className, lineNumber);
+							pendingOperations.add(cmd);
+						}
+						break;
+	
+					default:
+						throw new UnsupportedOperationException();
 					}
-					break;
-
-				case "at": // e.g. "stop at MyClass:22"
-					className = st.nextToken(":").trim();
-					lineNumber = Integer.parseInt(st.nextToken());
-					if (isLoaded()) {
-						performStop(className, lineNumber);
-					} else {
-						print(DEFER_BREAKPOINT_LOC, className, lineNumber);
-						pendingOperations.add(cmd);
-					}
-					break;
-
-				default:
-					throw new UnsupportedOperationException();
+				} else {
+					// print all breakpoints
+					performPrintBreakpoints();
 				}
+				
 				break;
 
 			case "clear":
@@ -611,8 +633,16 @@ public class TextDebugger {
 			case "next":
 			case "catch":
 			case "ignore":
-				throw new UnsupportedOperationException();
-
+			case "threads":
+			case "thread":
+			case "where":
+				throw new UnsupportedOperationException(cmd);
+				
+			case "exit":
+			case "quit":
+			case "q":
+				break;
+				
 			default:
 				print(USAGE);
 			}

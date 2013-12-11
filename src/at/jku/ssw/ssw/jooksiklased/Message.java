@@ -15,7 +15,8 @@ public enum Message {
 	VM_ERROR("%s"),
 	USAGE("run / cont / print / dump / threads / thread / where / stop / clear / step / next / catch / ignore"),
 	TOO_MANY_ARGS("No use for arguments: %s"),
-	NO_FIELD("No static field or method with the name %s in %s");
+	NO_FIELD("No static field or method with the name %s in %s"),
+	LIST_BREAKPOINTS("Breakpoints set:\n%s");
 
 	private final String msg;
 
