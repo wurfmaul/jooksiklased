@@ -17,9 +17,9 @@ public enum Message {
 	TOO_MANY_ARGS("No use for arguments: %s"),
 	NO_FIELD("No static field or method with the name %s in %s");
 
-	private String msg;
+	private final String msg;
 
-	Message(String msg) {
+	private Message(String msg) {
 		this.msg = msg;
 	}
 

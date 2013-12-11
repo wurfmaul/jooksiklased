@@ -9,14 +9,15 @@ import java.io.Reader;
 import java.io.Writer;
 
 public class Redirection extends Thread {
-	private Reader in;
-	private Writer out;
+	private final Reader in;
+	private final Writer out;
 
 	Redirection(InputStream is, OutputStream os) {
 		in = new InputStreamReader(is);
 		out = new OutputStreamWriter(os);
 	}
 
+	@Override
 	public void run() {
 		try {
 			char[] buf = new char[1024];

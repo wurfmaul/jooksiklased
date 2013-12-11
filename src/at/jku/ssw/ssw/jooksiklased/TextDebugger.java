@@ -224,7 +224,7 @@ public class TextDebugger {
 		final ReferenceType clazz = findClass(className);
 		for (Field f : clazz.visibleFields()) {
 			if (f.isStatic()) {
-				String value = valueToString(clazz.getValue(f));
+				String value = valueToString(clazz.getValue(f), false);
 				print(VAR, f.typeName(), f.name(), value);
 			} else {
 				print(FIELD, f.typeName(), f.name());
@@ -237,13 +237,15 @@ public class TextDebugger {
 
 		final StackFrame curFrame = curThread.frame(0);
 		for (LocalVariable var : curFrame.visibleVariables()) {
-			String value = valueToString(curFrame.getValue(var));
+			String value = valueToString(curFrame.getValue(var), false);
 			print(VAR, var.typeName(), var.name(), value);
 		}
 	}
 
 	private void performPrintField(final String className,
-			final String fieldName) {
+			final String fieldName, final boolean dump) {
+
+		// TODO dumping ?!? or remove arg!
 
 		ReferenceType clazz = findClass(className);
 		Field f = clazz.fieldByName(fieldName);
@@ -253,13 +255,13 @@ public class TextDebugger {
 			print(NO_FIELD, fieldName, className);
 	}
 
-	private void performPrintLocal(final String varName)
+	private void performPrintLocal(final String varName, final boolean dump)
 			throws IncompatibleThreadStateException, AbsentInformationException {
 
 		final StackFrame curFrame = curThread.frame(0);
 		final LocalVariable var = curFrame.visibleVariableByName(varName);
 		if (var != null) {
-			final String value = valueToString(curFrame.getValue(var));
+			final String value = valueToString(curFrame.getValue(var), dump);
 			print(VAR, var.typeName(), var.name(), value);
 		} else {
 			print(UNKNOWN, varName);
@@ -448,7 +450,18 @@ public class TextDebugger {
 		return retValue;
 	}
 
-	private static String valueToString(Value val) {
+	/**
+	 * Convert values of type Value into human-readable String objects.
+	 * 
+	 * @param val
+	 *            Value which is about to be displayed.
+	 * @param dump
+	 *            If true, complex types (arrays, objects, ...) are displayed
+	 *            including elements or fields. Otherwise they are printed using
+	 *            their name and id.
+	 * @return String representation of value.
+	 */
+	private static String valueToString(final Value val, final boolean dump) {
 		if (val instanceof BooleanValue) {
 			return ((BooleanValue) val).value() + "";
 		} else if (val instanceof ByteValue) {
@@ -466,26 +479,51 @@ public class TextDebugger {
 		} else if (val instanceof ShortValue) {
 			return ((ShortValue) val).value() + "";
 		} else if (val instanceof StringReference) {
-			return ((StringReference) val).value() + "";
+			return "\"" + ((StringReference) val).value() + "\"";
 		} else if (val instanceof ArrayReference) {
 			final ArrayReference arr = (ArrayReference) val;
-			final String type = arr.type().name();
 			final StringBuilder sb = new StringBuilder();
-			sb.append("instance of " + type + "(id=" + arr.uniqueID() + ")");
-			// print elements
-//			sb.append("\n  +-> [");
-//			Iterator<Value> iter = arr.getValues().iterator();
-//			while (iter.hasNext()) {
-//				sb.append(valueToString(iter.next()));
-//				if (iter.hasNext())
-//					sb.append(", ");
-//			}
-//			sb.append("]");
+			if (dump) {
+				// print elements
+				sb.append("{");
+				Iterator<Value> iter = arr.getValues().iterator();
+				while (iter.hasNext()) {
+					sb.append(valueToString(iter.next(), true));
+					if (iter.hasNext()) {
+						sb.append(", ");
+					}
+				}
+				sb.append("}");
+			} else {
+				final String type = arr.type().name();
+				final long id = arr.uniqueID();
+				sb.append("instance of " + type + " (id=" + id + ")");
+			}
 			return sb.toString();
 		} else if (val instanceof ObjectReferenceImpl) {
 			final ObjectReferenceImpl obj = (ObjectReferenceImpl) val;
-			return "instance of " + obj.type().name() + "(id=" + obj.uniqueID()
-					+ ")";
+			final StringBuilder sb = new StringBuilder();
+			if (dump) {
+				// print fields
+				sb.append("[");
+				Iterator<Field> iter = obj.referenceType().allFields()
+						.iterator();
+				while (iter.hasNext()) {
+					Field f = iter.next();
+					sb.append(f.name());
+					sb.append("=");
+					sb.append(valueToString(obj.getValue(f), true));
+					if (iter.hasNext()) {
+						sb.append(", ");
+					}
+				}
+				sb.append("]");
+			} else {
+				final String type = obj.type().name();
+				final long id = obj.uniqueID();
+				sb.append("instance of " + type + " (id=" + id + ")");
+			}
+			return sb.toString();
 		} else {
 			throw new UnsupportedOperationException(val.getClass().getName());
 		}
@@ -511,9 +549,9 @@ public class TextDebugger {
 			case "print":
 				className = st.nextToken();
 				if (st.hasMoreTokens()) {
-					performPrintField(className.trim(), st.nextToken().trim());
+					performPrintField(className.trim(), st.nextToken(), false);
 				} else {
-					performPrintLocal(className.trim());
+					performPrintLocal(className.trim(), false);
 				}
 				break;
 
@@ -526,6 +564,14 @@ public class TextDebugger {
 				break;
 
 			case "dump":
+				className = st.nextToken();
+				if (st.hasMoreTokens()) {
+					performPrintField(className.trim(), st.nextToken(), true);
+				} else {
+					performPrintLocal(className.trim(), true);
+				}
+				break;
+
 			case "threads":
 			case "thread":
 			case "where":
@@ -565,7 +611,7 @@ public class TextDebugger {
 			case "next":
 			case "catch":
 			case "ignore":
-				throw new UnsupportedOperationException("catch / ignore");
+				throw new UnsupportedOperationException();
 
 			default:
 				print(USAGE);
