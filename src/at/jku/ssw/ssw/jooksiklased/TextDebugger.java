@@ -64,7 +64,6 @@ import com.sun.jdi.connect.VMStartException;
 import com.sun.jdi.event.BreakpointEvent;
 import com.sun.jdi.event.Event;
 import com.sun.jdi.event.EventIterator;
-import com.sun.jdi.event.EventQueue;
 import com.sun.jdi.event.EventSet;
 import com.sun.jdi.event.MethodEntryEvent;
 import com.sun.jdi.event.MethodExitEvent;
@@ -78,19 +77,27 @@ import com.sun.jdi.request.MethodExitRequest;
 import com.sun.jdi.request.StepRequest;
 import com.sun.tools.jdi.ObjectReferenceImpl;
 
+/**
+ * Main class of debugger. Contains the main loop of the interface
+ * 
+ * @author Wolfgang Küllinger (0955711)
+ * 
+ */
 public class TextDebugger {
-	/**
-	 * If an operation requires an unloaded class to be loaded, the operations
-	 * can be stored in this list in order to perform immediately after class
-	 * loading.
-	 */
+	/** The environment for the debuggee. */
 	private final VirtualMachine vm;
-
-	private Stack<Method> methodStack;
-	private Queue<Breakpoint> pendingBreakpoints;
+	/** The central request manager of the given vm. */
 	private EventRequestManager reqManager;
+	/** A reference to the current thread. */
 	private ThreadReference curThread;
+
+	/** Stack of currently active methods. */
+	private Stack<Method> methodStack;
+	/** Breakpoints that were not yet set because vm is not loaded. */
+	private Queue<Breakpoint> pendingBreakpoints;
+	/** Flag for the main loop, whether to exit at next run or not. */
 	private boolean terminate = false;
+	/** The name of the debuggee class. */
 	private String debuggee = null;
 
 	/**
@@ -147,12 +154,21 @@ public class TextDebugger {
 		init();
 	}
 
-	private void setBreakpoint(Location loc) {
+	/**
+	 * Set a new breakpoint at given location.
+	 * 
+	 * @param loc
+	 *            Location to set breakpoint at.
+	 */
+	private void setBreakpoint(final Location loc) {
 		final Method method = loc.method();
 		print(SET_BREAKPOINT, method, loc.lineNumber());
 		reqManager.createBreakpointRequest(loc).enable();
 	}
 
+	/**
+	 * Enable possibility to step by one.
+	 */
 	private void setStep() {
 		final StepRequest req = reqManager.createStepRequest(curThread,
 				StepRequest.STEP_LINE, StepRequest.STEP_OVER);
@@ -160,6 +176,12 @@ public class TextDebugger {
 		req.enable();
 	}
 
+	/**
+	 * Deletes a given breakpoint from list of pending breakpoints or from the
+	 * request manager's list.
+	 * 
+	 * @param breakpoint
+	 */
 	private void performClear(final Breakpoint breakpoint) {
 		if (!isLoaded()) {
 			// find within pending breakpoints
@@ -190,7 +212,8 @@ public class TextDebugger {
 	}
 
 	/**
-	 * This method continues to next breakpoint if the VM is started.
+	 * This method continues to next breakpoint or step event if the VM is
+	 * started.
 	 */
 	private void performCont() {
 		if (!isLoaded()) {
@@ -198,14 +221,14 @@ public class TextDebugger {
 			return;
 		}
 
+		// let threads run
 		curThread.resume();
 		vm.resume();
 
-		EventQueue q = vm.eventQueue();
-
+		// listen for events
 		try {
 			while (true) {
-				final EventSet events = q.remove();
+				final EventSet events = vm.eventQueue().remove();
 				final EventIterator iter = events.eventIterator();
 				while (iter.hasNext()) {
 					Event e = iter.nextEvent();
@@ -259,6 +282,12 @@ public class TextDebugger {
 		}
 	}
 
+	/**
+	 * Reads fields from given class if vm is loaded.
+	 * 
+	 * @param className
+	 *            Name of class of which the fields are to be printed.
+	 */
 	private void performFields(final String className) {
 		final ReferenceType clazz = findClass(className);
 		for (Field f : clazz.visibleFields()) {
@@ -271,6 +300,10 @@ public class TextDebugger {
 		}
 	}
 
+	/**
+	 * Reads visible local variables at certain position, depending on the
+	 * current frame.
+	 */
 	private void performLocals() {
 		try {
 			final StackFrame curFrame = curThread.frame(0);
@@ -285,6 +318,9 @@ public class TextDebugger {
 		}
 	}
 
+	/**
+	 * Prints a list of all set breakpoints.
+	 */
 	private void performPrintBreakpoints() {
 		final StringBuilder sb = new StringBuilder();
 
@@ -305,6 +341,18 @@ public class TextDebugger {
 		print(LIST_BREAKPOINTS, sb.toString());
 	}
 
+	/**
+	 * Prints one specific field of given class.
+	 * 
+	 * @param className
+	 *            Name of class which contains the field
+	 * @param fieldName
+	 *            Name of field which is about to be displayed.
+	 * @param dump
+	 *            True if complex structures like classes or arrays should be
+	 *            printed including their contents. False if only the name and
+	 *            id should be printed.
+	 */
 	private void performPrintField(final String className,
 			final String fieldName, final boolean dump) {
 		final ReferenceType clazz = findClass(className);
@@ -316,6 +364,16 @@ public class TextDebugger {
 			print(NO_FIELD, fieldName, className);
 	}
 
+	/**
+	 * Prints one specific field of given class.
+	 * 
+	 * @param varName
+	 *            Name of local variable which is about to be displayed.
+	 * @param dump
+	 *            True if complex structures like classes or arrays should be
+	 *            printed including their contents. False if only the name and
+	 *            id should be printed.
+	 */
 	private void performPrintLocal(final String varName, final boolean dump) {
 		try {
 			StackFrame curFrame = curThread.frame(0);
@@ -400,16 +458,20 @@ public class TextDebugger {
 		}
 	}
 
+	/**
+	 * Performs a single step throughout the source file.
+	 */
 	private void performStep() {
 		setStep();
 		performCont();
 	}
 
 	/**
-	 * Find location by class name and method name and set breakpoint.
+	 * Find location by given breakpoint dummy and set breakpoint.
 	 * 
-	 * @param className
-	 * @param lineNumber
+	 * @param breakpoint
+	 *            A dummy object containing all information required to set a
+	 *            breakpoint.
 	 */
 	private void performStop(final Breakpoint breakpoint) {
 		final String className = breakpoint.className;
@@ -450,6 +512,9 @@ public class TextDebugger {
 		}
 	}
 
+	/**
+	 * Prints a method trace, i.e. all currently active methods.
+	 */
 	private void performWhere() {
 		final StringBuilder sb = new StringBuilder();
 		final int size = methodStack.size();
@@ -653,6 +718,13 @@ public class TextDebugger {
 		}
 	}
 
+	/**
+	 * Public interface of the debugger. Takes a command in form of a String and
+	 * performs necessary steps in order to follow the command.
+	 * 
+	 * @param cmd
+	 *            Debugging command in String form (e.g. "stop in MyClass.main")
+	 */
 	public void perform(final String cmd) {
 		StringTokenizer st = new StringTokenizer(cmd, " .");
 		Breakpoint breakpoint;
@@ -786,6 +858,12 @@ public class TextDebugger {
 		}
 	}
 
+	/**
+	 * Starts an interactive instance of the debugger.
+	 * 
+	 * @param args
+	 *            Command line arguments.
+	 */
 	public static void main(String[] args) {
 		try {
 			TextDebugger debugger;
