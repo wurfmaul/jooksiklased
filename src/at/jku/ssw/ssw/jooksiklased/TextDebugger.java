@@ -444,7 +444,6 @@ public class TextDebugger {
 				Message.print(Message.NO_METHOD, className, methodName,
 						methodName, className);
 			}
-
 		}
 	}
 
