@@ -476,7 +476,9 @@ public class TextDebugger {
 	}
 
 	/**
-	 * True if VM is loaded, false otherwise.
+	 * Determines whether the vm is loaded or not.
+	 * 
+	 * @return True if VM is loaded, false otherwise.
 	 */
 	private boolean isLoaded() {
 		try {
@@ -486,6 +488,14 @@ public class TextDebugger {
 		return true;
 	}
 
+	/**
+	 * Once the vm is loaded, the class object reference can be found using its
+	 * name.
+	 * 
+	 * @param className
+	 *            The name of the wanted class.
+	 * @return class reference according to given name.
+	 */
 	private ReferenceType findClass(final String className) {
 		final List<ReferenceType> classes = vm.classesByName(className);
 
@@ -522,6 +532,13 @@ public class TextDebugger {
 		}
 	}
 
+	/**
+	 * The textual interface of the debugger. Specifically it is nothing else
+	 * than an infinite loop which blocks on user input and performs action
+	 * according to commands. Can be exited by special commands.
+	 * 
+	 * @return 0 in case of successful processing, -1 otherwise
+	 */
 	private int ui() {
 		final BufferedReader in = new BufferedReader(new InputStreamReader(
 				System.in));
@@ -720,8 +737,7 @@ public class TextDebugger {
 				performStep();
 				break;
 
-			case "clear":
-				// e.g. clear MyClass:45
+			case "clear": // e.g. clear MyClass:45
 				if (st.hasMoreTokens()) {
 					// delete breakpoints
 					className = st.nextToken(".:").trim();
