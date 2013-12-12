@@ -196,6 +196,8 @@ public class TextDebugger {
 						terminate = true;
 						break;
 					} else if (e instanceof MethodEntryEvent) {
+						// suspend in order to be able to print locals
+						curThread.suspend();
 						// push entered method on method stack
 						methodStack.push(((MethodEntryEvent) e).method());
 					} else if (e instanceof MethodExitEvent) {
@@ -203,6 +205,7 @@ public class TextDebugger {
 						final Method lastMet = methodStack.pop();
 						assert ((MethodExitEvent) e).method().equals(lastMet);
 					}
+					curThread.resume();
 					vm.resume();
 				}
 			}
@@ -228,13 +231,13 @@ public class TextDebugger {
 	private void performLocals() throws IncompatibleThreadStateException,
 			AbsentInformationException {
 
-		// FIXME: does not print current values!
+		// FIXME locals does not work
+		curThread.suspend();
 		final StackFrame curFrame = curThread.frame(0);
-		for (LocalVariable var : curFrame.visibleVariables()) {
-			String value = valueToString(curFrame.getValue(var), false);
-			print(VAR, var.typeName(), var.name(), value);
+		for(LocalVariable val : curFrame.visibleVariables()) {
+			final String value = valueToString(curFrame.getValue(val), false);
+			print(VAR, val.typeName(), val.name(), value);
 		}
-
 	}
 
 	private void performPrintBreakpoints() {
