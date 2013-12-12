@@ -274,12 +274,11 @@ public class TextDebugger {
 
 	private void performPrintField(final String className,
 			final String fieldName, final boolean dump) {
-
-		// TODO dumping ?!? or remove arg!
-		ReferenceType clazz = findClass(className);
-		Field f = clazz.fieldByName(fieldName);
+		final ReferenceType clazz = findClass(className);
+		final Field f = clazz.fieldByName(fieldName);
 		if (f.isStatic())
-			print(VAR, f.typeName(), f.name(), clazz.getValue(f));
+			print(VAR, f.typeName(), f.name(),
+					valueToString(clazz.getValue(f), dump));
 		else
 			print(NO_FIELD, fieldName, className);
 	}
