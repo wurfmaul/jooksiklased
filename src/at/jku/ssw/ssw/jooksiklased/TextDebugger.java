@@ -183,7 +183,6 @@ public class TextDebugger {
 								loc.lineNumber(), loc.codeIndex());
 						return;
 					} else if (e instanceof StepEvent) {
-						// FIXME: something does not work...
 						final StepEvent se = (StepEvent) e;
 						final Location loc = se.location();
 						print(STEP, ((StepEvent) e).thread().name(),
@@ -197,13 +196,27 @@ public class TextDebugger {
 						break;
 					} else if (e instanceof MethodEntryEvent) {
 						// push entered method on method stack
-						methodStack.push(((MethodEntryEvent) e).method());
+						final MethodEntryEvent mee = (MethodEntryEvent) e;
+						methodStack.push(mee.method());
+
+						// do not resume vm if a breakpoint is reached
+						boolean isBreakpoint = true;
+						for (BreakpointRequest bpr : reqManager
+								.breakpointRequests()) {
+							if (bpr.location().equals(mee.location())) {
+								isBreakpoint = false;
+							}
+						}
+						if (isBreakpoint) {
+							vm.resume();
+						}
+
 					} else if (e instanceof MethodExitEvent) {
 						// pop exited method from method stack
 						final Method lastMet = methodStack.pop();
 						assert ((MethodExitEvent) e).method().equals(lastMet);
+						vm.resume();
 					}
-					vm.resume();
 				}
 			}
 		} catch (InterruptedException e) {
@@ -225,16 +238,18 @@ public class TextDebugger {
 		}
 	}
 
-	private void performLocals() throws IncompatibleThreadStateException,
-			AbsentInformationException {
-
-		// FIXME: does not print current values!
-		final StackFrame curFrame = curThread.frame(0);
-		for (LocalVariable var : curFrame.visibleVariables()) {
-			String value = valueToString(curFrame.getValue(var), false);
-			print(VAR, var.typeName(), var.name(), value);
+	private void performLocals() {
+		try {
+			final StackFrame curFrame = curThread.frame(0);
+			for (LocalVariable var : curFrame.visibleVariables()) {
+				String value = valueToString(curFrame.getValue(var), false);
+				print(VAR, var.typeName(), var.name(), value);
+			}
+		} catch (IncompatibleThreadStateException e) {
+			e.printStackTrace();
+		} catch (AbsentInformationException e) {
+			e.printStackTrace();
 		}
-
 	}
 
 	private void performPrintBreakpoints() {
@@ -269,16 +284,20 @@ public class TextDebugger {
 			print(NO_FIELD, fieldName, className);
 	}
 
-	private void performPrintLocal(final String varName, final boolean dump)
-			throws IncompatibleThreadStateException, AbsentInformationException {
-
-		final StackFrame curFrame = curThread.frame(0);
-		final LocalVariable var = curFrame.visibleVariableByName(varName);
-		if (var != null) {
-			final String value = valueToString(curFrame.getValue(var), dump);
-			print(VAR, var.typeName(), var.name(), value);
-		} else {
-			print(UNKNOWN, varName);
+	private void performPrintLocal(final String varName, final boolean dump) {
+		try {
+			StackFrame curFrame = curThread.frame(0);
+			final LocalVariable var = curFrame.visibleVariableByName(varName);
+			if (var != null) {
+				final String value = valueToString(curFrame.getValue(var), dump);
+				print(VAR, var.typeName(), var.name(), value);
+			} else {
+				print(UNKNOWN, varName);
+			}
+		} catch (IncompatibleThreadStateException e) {
+			e.printStackTrace();
+		} catch (AbsentInformationException e) {
+			e.printStackTrace();
 		}
 	}
 
@@ -319,6 +338,7 @@ public class TextDebugger {
 						methodStack.push(((MethodEntryEvent) e).method());
 						// init done, tell loop to stop
 						exit = true;
+						curThread.suspend();
 						break;
 					} else {
 						assert e instanceof VMStartEvent;
@@ -689,10 +709,6 @@ public class TextDebugger {
 			default:
 				print(USAGE);
 			}
-		} catch (AbsentInformationException e) {
-			e.printStackTrace();
-		} catch (IncompatibleThreadStateException e) {
-			e.printStackTrace();
 		} catch (NoSuchElementException e) {
 			print(INVALID_CMD, cmd);
 		}

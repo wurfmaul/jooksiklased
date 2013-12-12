@@ -10,7 +10,6 @@ import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
 import static at.jku.ssw.ssw.jooksiklased.Message.VAR;
 import static org.junit.Assert.assertEquals;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class VarTest extends AbstractTest {
@@ -82,7 +81,6 @@ public class VarTest extends AbstractTest {
 		assertEquals(exp.toString().trim(), out.toString().trim());
 	}
 
-	@Ignore
 	@Test
 	public void stepTest() {
 		debugger.perform("stop in Calc.calc");
