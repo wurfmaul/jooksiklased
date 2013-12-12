@@ -94,7 +94,8 @@ public class TextDebugger {
 	private String debuggee = null;
 
 	/**
-	 * The attaching debugger
+	 * The attaching debugger needs the debuggee to be run itself using a
+	 * specific port (which is here 8000 by default).
 	 * 
 	 * @throws IOException
 	 * @throws IllegalConnectorArgumentsException
@@ -123,9 +124,11 @@ public class TextDebugger {
 	}
 
 	/**
-	 * The launching debugger
+	 * The launching debugger does not need the debuggee to be started by
+	 * itself, but starts the vm itself.
 	 * 
 	 * @param debuggee
+	 *            The name of the class which is about to be debugged.
 	 * @throws IOException
 	 * @throws IllegalConnectorArgumentsException
 	 * @throws VMStartException
@@ -779,49 +782,6 @@ public class TextDebugger {
 			e.printStackTrace();
 		} catch (VMStartException e) {
 			e.printStackTrace();
-		}
-	}
-
-	private class Breakpoint {
-		final String className;
-		final String methodName;
-		final int lineNumber;
-
-		public Breakpoint(String className, String methodName) {
-			this.className = className;
-			this.methodName = methodName;
-			this.lineNumber = -1;
-		}
-
-		public Breakpoint(String className, int lineNumber) {
-			this.className = className;
-			this.methodName = null;
-			this.lineNumber = lineNumber;
-		}
-
-		@Override
-		public String toString() {
-			final StringBuilder sb = new StringBuilder();
-			sb.append(className);
-			if (methodName != null) {
-				sb.append(".");
-				sb.append(methodName);
-			} else {
-				sb.append(":");
-				sb.append(lineNumber);
-			}
-			return sb.toString();
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (!(obj instanceof Breakpoint))
-				return false;
-
-			final Breakpoint other = (Breakpoint) obj;
-			return className.equals(other.className)
-					&& methodName.equals(other.methodName)
-					&& lineNumber == other.lineNumber;
 		}
 	}
 }
