@@ -1,13 +1,14 @@
 package at.jku.ssw.ssw.jooksiklased;
 
+import static at.jku.ssw.ssw.jooksiklased.Message.BREAKPOINT_NOT_FOUND;
 import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
-import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT_LOC;
 import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
 import static at.jku.ssw.ssw.jooksiklased.Message.FIELD;
 import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.INVALID_CMD;
 import static at.jku.ssw.ssw.jooksiklased.Message.LIST_BREAKPOINTS;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELD;
+import static at.jku.ssw.ssw.jooksiklased.Message.REMOVE_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
 import static at.jku.ssw.ssw.jooksiklased.Message.TOO_MANY_ARGS;
@@ -22,6 +23,7 @@ import static at.jku.ssw.ssw.jooksiklased.Message.print;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayDeque;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +31,6 @@ import java.util.NoSuchElementException;
 import java.util.Queue;
 import java.util.Stack;
 import java.util.StringTokenizer;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 import com.sun.jdi.AbsentInformationException;
 import com.sun.jdi.ArrayReference;
@@ -86,7 +87,7 @@ public class TextDebugger {
 	private final VirtualMachine vm;
 
 	private Stack<Method> methodStack;
-	private Queue<String> pendingOperations;
+	private Queue<Breakpoint> pendingBreakpoints;
 	private EventRequestManager reqManager;
 	private ThreadReference curThread;
 	private boolean terminate = false;
@@ -154,6 +155,35 @@ public class TextDebugger {
 				StepRequest.STEP_LINE, StepRequest.STEP_OVER);
 		req.addCountFilter(1);
 		req.enable();
+	}
+
+	private void performClear(final Breakpoint breakpoint) {
+		if (!isLoaded()) {
+			// find within pending breakpoints
+			if (pendingBreakpoints.remove(breakpoint)) {
+				print(REMOVE_BREAKPOINT, breakpoint);
+			} else {
+				print(BREAKPOINT_NOT_FOUND, breakpoint);
+			}
+			return;
+		}
+
+		// find set breakpoint
+		for (BreakpointRequest req : reqManager.breakpointRequests()) {
+			final String className = req.location().declaringType().name();
+			final String methodName = req.location().method().name();
+			final int lineNumber = req.location().lineNumber();
+
+			if (className.equals(breakpoint.className)
+					&& (methodName.equals(breakpoint.methodName) || lineNumber == breakpoint.lineNumber)) {
+				reqManager.deleteEventRequest(req);
+				print(REMOVE_BREAKPOINT, breakpoint);
+				return;
+			}
+		}
+
+		// not found
+		print(BREAKPOINT_NOT_FOUND, breakpoint);
 	}
 
 	/**
@@ -350,8 +380,8 @@ public class TextDebugger {
 		}
 
 		// perform pending operations
-		while (pendingOperations.size() > 0) {
-			perform(pendingOperations.remove());
+		while (pendingBreakpoints.size() > 0) {
+			performStop(pendingBreakpoints.remove());
 		}
 
 		if (curThread.isAtBreakpoint()) {
@@ -378,47 +408,43 @@ public class TextDebugger {
 	 * @param className
 	 * @param lineNumber
 	 */
-	private void performStop(String className, int lineNumber) {
-		assert lineNumber != -1;
+	private void performStop(final Breakpoint breakpoint) {
+		final String className = breakpoint.className;
+		final String methodName = breakpoint.methodName;
+		final int lineNumber = breakpoint.lineNumber;
 
-		// find location
-		try {
-			List<Location> locs = findClass(className).locationsOfLine(
-					lineNumber);
-			assert locs.size() == 1;
-			setBreakpoint(locs.get(0));
-		} catch (AbsentInformationException e) {
-			e.printStackTrace(); // EMPTY_CLASS ?
-		}
-	}
-
-	/**
-	 * Find location by class name and line number and set breakpoint.
-	 * 
-	 * @param className
-	 * @param methodName
-	 */
-	private void performStop(String className, String methodName) {
-		assert methodName != null;
-
-		final List<Method> methods = findClass(className).methodsByName(
-				methodName);
-		assert methods.size() <= 1;
-
-		if (methods.size() == 1) {
-			Method method = methods.get(0);
-
-			// get first executable line
+		if (lineNumber >= 0) {
+			// find location by line number
 			try {
-				List<Location> locs = method.allLineLocations();
-				assert locs.size() > 0;
+				List<Location> locs = findClass(className).locationsOfLine(
+						lineNumber);
+				assert locs.size() == 1;
 				setBreakpoint(locs.get(0));
 			} catch (AbsentInformationException e) {
-				e.printStackTrace(); // METHOD_EMPTY ?
+				e.printStackTrace(); // TODO EMPTY_CLASS ?
 			}
 		} else {
-			Message.print(Message.NO_METHOD, className, methodName, methodName,
-					className);
+			// find location by method name
+			final List<Method> methods = findClass(className).methodsByName(
+					methodName);
+			assert methods.size() <= 1;
+
+			if (methods.size() == 1) {
+				Method method = methods.get(0);
+
+				// get first executable line
+				try {
+					List<Location> locs = method.allLineLocations();
+					assert locs.size() > 0;
+					setBreakpoint(locs.get(0));
+				} catch (AbsentInformationException e) {
+					e.printStackTrace(); // TODO METHOD_EMPTY ?
+				}
+			} else {
+				Message.print(Message.NO_METHOD, className, methodName,
+						methodName, className);
+			}
+
 		}
 	}
 
@@ -472,7 +498,7 @@ public class TextDebugger {
 	 */
 	private void init() {
 		// make space for pending operations
-		pendingOperations = new ConcurrentLinkedQueue<>();
+		pendingBreakpoints = new ArrayDeque<>();
 		methodStack = new Stack<>();
 
 		// Establish Request Manager
@@ -509,7 +535,8 @@ public class TextDebugger {
 				case "exit":
 				case "q":
 					vm.dispose();
-					return 0;
+					terminate = true;
+					break;
 				default:
 					perform(cmd);
 				}
@@ -522,6 +549,7 @@ public class TextDebugger {
 		}
 		try {
 			in.close();
+			vm.dispose();
 		} catch (IOException e) {
 		}
 		return retValue;
@@ -608,9 +636,10 @@ public class TextDebugger {
 
 	public void perform(final String cmd) {
 		StringTokenizer st = new StringTokenizer(cmd, " .");
+		Breakpoint breakpoint;
 		String className = null;
-		String methodName = null;
-		int lineNumber = -1;
+		String methodName;
+		int lineNumber;
 
 		try {
 			switch (st.nextToken()) {
@@ -655,33 +684,29 @@ public class TextDebugger {
 					case "in": // e.g. "stop in MyClass.main"
 						className = st.nextToken().trim();
 						methodName = st.nextToken().trim();
-						if (isLoaded()) {
-							performStop(className, methodName);
-						} else {
-							print(DEFER_BREAKPOINT, className, methodName);
-							pendingOperations.add(cmd);
-						}
+						breakpoint = new Breakpoint(className, methodName);
 						break;
 
 					case "at": // e.g. "stop at MyClass:22"
 						className = st.nextToken(":").trim();
 						lineNumber = Integer.parseInt(st.nextToken());
-						if (isLoaded()) {
-							performStop(className, lineNumber);
-						} else {
-							print(DEFER_BREAKPOINT_LOC, className, lineNumber);
-							pendingOperations.add(cmd);
-						}
+						breakpoint = new Breakpoint(className, lineNumber);
 						break;
 
 					default:
 						throw new UnsupportedOperationException();
 					}
+
+					if (isLoaded()) {
+						performStop(breakpoint);
+					} else {
+						print(DEFER_BREAKPOINT, breakpoint);
+						pendingBreakpoints.add(breakpoint);
+					}
 				} else {
 					// print all breakpoints
 					performPrintBreakpoints();
 				}
-
 				break;
 
 			case "where":
@@ -689,11 +714,29 @@ public class TextDebugger {
 				break;
 
 			case "step":
+			case "next":
 				performStep();
 				break;
 
 			case "clear":
-			case "next":
+				// e.g. clear MyClass:45
+				if (st.hasMoreTokens()) {
+					// delete breakpoints
+					className = st.nextToken(".:").trim();
+					methodName = st.nextToken().trim();
+					try {
+						lineNumber = Integer.parseInt(methodName);
+						breakpoint = new Breakpoint(className, lineNumber);
+					} catch (NumberFormatException e) {
+						breakpoint = new Breakpoint(className, methodName);
+					}
+					performClear(breakpoint);
+				} else {
+					// print all breakpoints
+					performPrintBreakpoints();
+				}
+				break;
+
 			case "catch":
 			case "ignore":
 			case "threads":
@@ -737,6 +780,49 @@ public class TextDebugger {
 			e.printStackTrace();
 		} catch (VMStartException e) {
 			e.printStackTrace();
+		}
+	}
+
+	private class Breakpoint {
+		final String className;
+		final String methodName;
+		final int lineNumber;
+
+		public Breakpoint(String className, String methodName) {
+			this.className = className;
+			this.methodName = methodName;
+			this.lineNumber = -1;
+		}
+
+		public Breakpoint(String className, int lineNumber) {
+			this.className = className;
+			this.methodName = null;
+			this.lineNumber = lineNumber;
+		}
+
+		@Override
+		public String toString() {
+			final StringBuilder sb = new StringBuilder();
+			sb.append(className);
+			if (methodName != null) {
+				sb.append(".");
+				sb.append(methodName);
+			} else {
+				sb.append(":");
+				sb.append(lineNumber);
+			}
+			return sb.toString();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (!(obj instanceof Breakpoint))
+				return false;
+
+			final Breakpoint other = (Breakpoint) obj;
+			return className.equals(other.className)
+					&& methodName.equals(other.methodName)
+					&& lineNumber == other.lineNumber;
 		}
 	}
 }

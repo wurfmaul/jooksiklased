@@ -1,7 +1,6 @@
 package at.jku.ssw.ssw.jooksiklased.test;
 
 import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
-import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT_LOC;
 import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
 import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
@@ -28,7 +27,7 @@ public class VarTest extends AbstractTest {
 		debugger.perform("cont");
 
 		final StringBuilder exp = new StringBuilder();
-		exp.append(format(DEFER_BREAKPOINT_LOC, "Calc", 16));
+		exp.append(format(DEFER_BREAKPOINT, "Calc:16"));
 		exp.append(format(SET_BREAKPOINT, MAIN, 16));
 		exp.append(format(HIT_BREAKPOINT, "main", MAIN, 16, 20));
 		exp.append(format(VAR, ARGS, "args", "instance of " + ARGS + " (id=0)"));
@@ -52,7 +51,7 @@ public class VarTest extends AbstractTest {
 		final String c = "[a=12, b=13, c=\"42\", d=8]";
 		final String args = "{}";
 		final StringBuilder exp = new StringBuilder();
-		exp.append(format(DEFER_BREAKPOINT_LOC, "Calc", 16));
+		exp.append(format(DEFER_BREAKPOINT, "Calc:16"));
 		exp.append(format(SET_BREAKPOINT, MAIN, 16));
 		exp.append(format(HIT_BREAKPOINT, "main", MAIN, 16, 20));
 		exp.append(format(VAR, "Calc", "c", "instance of Calc (id=0)"));
@@ -73,7 +72,7 @@ public class VarTest extends AbstractTest {
 		final String trace = "\t[1] Calc.calc (Calc.java)\n"
 				+ "\t[2] Calc.main (Calc.java)";
 		final StringBuilder exp = new StringBuilder();
-		exp.append(format(DEFER_BREAKPOINT_LOC, "Calc", 26));
+		exp.append(format(DEFER_BREAKPOINT, "Calc:26"));
 		exp.append(format(SET_BREAKPOINT, "Calc.calc(float)", 26));
 		exp.append(format(HIT_BREAKPOINT, "main", "Calc.calc(float)", 26, 14));
 		exp.append(format(TRACE, trace));
@@ -91,7 +90,7 @@ public class VarTest extends AbstractTest {
 		debugger.perform("cont");
 
 		final StringBuilder exp = new StringBuilder();
-		exp.append(format(DEFER_BREAKPOINT, "Calc", "calc"));
+		exp.append(format(DEFER_BREAKPOINT, "Calc.calc"));
 		exp.append(format(SET_BREAKPOINT, "Calc.calc(float)", 24));
 		exp.append(format(HIT_BREAKPOINT, "main", "Calc.calc(float)", 24, 0));
 		exp.append(format(VAR, "float", "val", "2.0"));

@@ -1,10 +1,11 @@
 package at.jku.ssw.ssw.jooksiklased.test;
 
+import static at.jku.ssw.ssw.jooksiklased.Message.BREAKPOINT_NOT_FOUND;
 import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
-import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT_LOC;
 import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
 import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.LIST_BREAKPOINTS;
+import static at.jku.ssw.ssw.jooksiklased.Message.REMOVE_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
 import static org.junit.Assert.assertEquals;
 
@@ -18,40 +19,59 @@ public class BreakpointTest extends AbstractTest {
 	}
 
 	@Test
-	public void startUpBreakpointTest() {
+	public void deleteBreakpointTest() {
 		debugger.perform("stop in Test.main");
+		debugger.perform("stop in Test.hello");
 		debugger.perform("stop at Test:11");
 		debugger.perform("run");
-		debugger.perform("cont");
+		debugger.perform("clear Test.hello");
+		debugger.perform("clear Test:11");
 		debugger.perform("cont");
 
 		final StringBuilder exp = new StringBuilder();
-		exp.append(format(DEFER_BREAKPOINT, "Test", "main"));
-		exp.append(format(DEFER_BREAKPOINT_LOC, "Test", 11));
+		exp.append(format(DEFER_BREAKPOINT, "Test.main"));
+		exp.append(format(DEFER_BREAKPOINT, "Test.hello"));
+		exp.append(format(DEFER_BREAKPOINT, "Test:11"));
 		exp.append(format(SET_BREAKPOINT, MAIN, 4));
+		exp.append(format(SET_BREAKPOINT, "Test.hello(int)", 10));
 		exp.append(format(SET_BREAKPOINT, "Test.hello(int)", 11));
 		exp.append(format(HIT_BREAKPOINT, "main", MAIN, 4, 0));
-		exp.append(format(HIT_BREAKPOINT, "main", "Test.hello(int)", 11, 15));
+		exp.append(format(REMOVE_BREAKPOINT, "Test.hello"));
+		exp.append(format(REMOVE_BREAKPOINT, "Test:11"));
 		exp.append(EXIT);
 		assertEquals(exp.toString().trim(), out.toString().trim());
 	}
-
+	
 	@Test
-	public void simpleBreakpointTest() {
-		debugger.perform("stop at Test:11");
+	public void deleteNonExistentBreakpoint() {
+		debugger.perform("stop in Test.main");
+		debugger.perform("stop in Test.hello");
+		debugger.perform("clear Test.hello");
+		debugger.perform("clear Test.hello");
 		debugger.perform("run");
+		debugger.perform("clear Test:42");
 		debugger.perform("cont");
-
+		
 		final StringBuilder exp = new StringBuilder();
-		exp.append(format(DEFER_BREAKPOINT_LOC, "Test", 11));
-		exp.append(format(SET_BREAKPOINT, "Test.hello(int)", 11));
-		exp.append(format(HIT_BREAKPOINT, "main", "Test.hello(int)", 11, 15));
+		exp.append(format(DEFER_BREAKPOINT, "Test.main"));
+		exp.append(format(DEFER_BREAKPOINT, "Test.hello"));
+		exp.append(format(REMOVE_BREAKPOINT, "Test.hello"));
+		exp.append(format(BREAKPOINT_NOT_FOUND, "Test.hello"));
+		exp.append(format(SET_BREAKPOINT, MAIN, 4));
+		exp.append(format(HIT_BREAKPOINT, "main", MAIN, 4, 0));
+		exp.append(format(BREAKPOINT_NOT_FOUND, "Test:42"));
 		exp.append(EXIT);
 		assertEquals(exp.toString().trim(), out.toString().trim());
 	}
 
 	@Test
-	public void printBreakpointTest() {
+	public void noBreakpointsTest() {
+		debugger.perform("run");
+		assertEquals(EXIT.toString(), out.toString().trim());
+	}
+
+	@Test
+	public void printBreakpointsTest() {
 		debugger.perform("stop in Test.main");
 		debugger.perform("stop in Test.hello");
 		debugger.perform("stop at Test:5");
@@ -61,9 +81,9 @@ public class BreakpointTest extends AbstractTest {
 
 		final String bps = "\tTest.main: 4\n\tTest.hello: 10\n\tTest.main: 5";
 		final StringBuilder sb = new StringBuilder();
-		sb.append(format(DEFER_BREAKPOINT, "Test", "main"));
-		sb.append(format(DEFER_BREAKPOINT, "Test", "hello"));
-		sb.append(format(DEFER_BREAKPOINT_LOC, "Test", 5));
+		sb.append(format(DEFER_BREAKPOINT, "Test.main"));
+		sb.append(format(DEFER_BREAKPOINT, "Test.hello"));
+		sb.append(format(DEFER_BREAKPOINT, "Test:5"));
 		sb.append(format(SET_BREAKPOINT, MAIN, 4));
 		sb.append(format(SET_BREAKPOINT, "Test.hello(int)", 10));
 		sb.append(format(SET_BREAKPOINT, MAIN, 5));
@@ -73,9 +93,36 @@ public class BreakpointTest extends AbstractTest {
 	}
 
 	@Test
-	public void runTest() {
+	public void simpleBreakpointTest() {
+		debugger.perform("stop at Test:11");
 		debugger.perform("run");
-		assertEquals(EXIT.toString(), out.toString().trim());
+		debugger.perform("cont");
+
+		final StringBuilder exp = new StringBuilder();
+		exp.append(format(DEFER_BREAKPOINT, "Test:11"));
+		exp.append(format(SET_BREAKPOINT, "Test.hello(int)", 11));
+		exp.append(format(HIT_BREAKPOINT, "main", "Test.hello(int)", 11, 15));
+		exp.append(EXIT);
+		assertEquals(exp.toString().trim(), out.toString().trim());
+	}
+
+	@Test
+	public void startUpBreakpointTest() {
+		debugger.perform("stop in Test.main");
+		debugger.perform("stop at Test:11");
+		debugger.perform("run");
+		debugger.perform("cont");
+		debugger.perform("cont");
+
+		final StringBuilder exp = new StringBuilder();
+		exp.append(format(DEFER_BREAKPOINT, "Test.main"));
+		exp.append(format(DEFER_BREAKPOINT, "Test:11"));
+		exp.append(format(SET_BREAKPOINT, MAIN, 4));
+		exp.append(format(SET_BREAKPOINT, "Test.hello(int)", 11));
+		exp.append(format(HIT_BREAKPOINT, "main", MAIN, 4, 0));
+		exp.append(format(HIT_BREAKPOINT, "main", "Test.hello(int)", 11, 15));
+		exp.append(EXIT);
+		assertEquals(exp.toString().trim(), out.toString().trim());
 	}
 
 }

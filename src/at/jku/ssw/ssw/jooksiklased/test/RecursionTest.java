@@ -1,6 +1,6 @@
 package at.jku.ssw.ssw.jooksiklased.test;
 
-import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT_LOC;
+import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
@@ -32,12 +32,12 @@ public class RecursionTest extends AbstractTest {
 				+ "\t[8] Recursion.main (Recursion.java)";
 
 		final StringBuilder exp = new StringBuilder();
-		exp.append(format(DEFER_BREAKPOINT_LOC, "Recursion", 13));
+		exp.append(format(DEFER_BREAKPOINT, "Recursion:13"));
 		exp.append(format(SET_BREAKPOINT, "Recursion.fac(int)", 13));
 		exp.append(format(HIT_BREAKPOINT, "main", "Recursion.fac(int)", 13, 21));
 		exp.append(format(TRACE, trace));
 		exp.append(format(HIT_BREAKPOINT, "main", "Recursion.fac(int)", 13, 21));
 		assertEquals(exp.toString().trim(), out.toString().trim());
 	}
-
+	
 }
