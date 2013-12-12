@@ -1,22 +1,33 @@
 package at.jku.ssw.ssw.jooksiklased;
 
-import static at.jku.ssw.ssw.jooksiklased.Message.*;
+import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
+import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT_LOC;
+import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
+import static at.jku.ssw.ssw.jooksiklased.Message.FIELD;
+import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
+import static at.jku.ssw.ssw.jooksiklased.Message.INVALID_CMD;
+import static at.jku.ssw.ssw.jooksiklased.Message.LIST_BREAKPOINTS;
+import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELD;
+import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
+import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
+import static at.jku.ssw.ssw.jooksiklased.Message.TOO_MANY_ARGS;
+import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
+import static at.jku.ssw.ssw.jooksiklased.Message.UNKNOWN;
+import static at.jku.ssw.ssw.jooksiklased.Message.USAGE;
+import static at.jku.ssw.ssw.jooksiklased.Message.VAR;
+import static at.jku.ssw.ssw.jooksiklased.Message.VM_NOT_RUNNING;
+import static at.jku.ssw.ssw.jooksiklased.Message.VM_RUNNING;
+import static at.jku.ssw.ssw.jooksiklased.Message.print;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.PrintStream;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Queue;
+import java.util.Stack;
 import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -26,7 +37,6 @@ import com.sun.jdi.BooleanValue;
 import com.sun.jdi.Bootstrap;
 import com.sun.jdi.ByteValue;
 import com.sun.jdi.CharValue;
-import com.sun.jdi.ClassObjectReference;
 import com.sun.jdi.DoubleValue;
 import com.sun.jdi.Field;
 import com.sun.jdi.FloatValue;
@@ -36,8 +46,6 @@ import com.sun.jdi.LocalVariable;
 import com.sun.jdi.Location;
 import com.sun.jdi.LongValue;
 import com.sun.jdi.Method;
-import com.sun.jdi.Mirror;
-import com.sun.jdi.ObjectReference;
 import com.sun.jdi.ReferenceType;
 import com.sun.jdi.ShortValue;
 import com.sun.jdi.StackFrame;
@@ -48,9 +56,9 @@ import com.sun.jdi.Value;
 import com.sun.jdi.VirtualMachine;
 import com.sun.jdi.connect.AttachingConnector;
 import com.sun.jdi.connect.Connector;
-import com.sun.jdi.connect.LaunchingConnector;
 import com.sun.jdi.connect.Connector.Argument;
 import com.sun.jdi.connect.IllegalConnectorArgumentsException;
+import com.sun.jdi.connect.LaunchingConnector;
 import com.sun.jdi.connect.VMStartException;
 import com.sun.jdi.event.BreakpointEvent;
 import com.sun.jdi.event.Event;
@@ -58,15 +66,16 @@ import com.sun.jdi.event.EventIterator;
 import com.sun.jdi.event.EventQueue;
 import com.sun.jdi.event.EventSet;
 import com.sun.jdi.event.MethodEntryEvent;
+import com.sun.jdi.event.MethodExitEvent;
+import com.sun.jdi.event.StepEvent;
 import com.sun.jdi.event.VMDisconnectEvent;
 import com.sun.jdi.request.BreakpointRequest;
 import com.sun.jdi.request.EventRequestManager;
 import com.sun.jdi.request.MethodEntryRequest;
+import com.sun.jdi.request.MethodExitRequest;
 import com.sun.jdi.request.StepRequest;
-import com.sun.jdi.request.VMDeathRequest;
 import com.sun.tools.jdi.ObjectReferenceImpl;
 
-@SuppressWarnings("unused")
 public class TextDebugger {
 	/**
 	 * If an operation requires an unloaded class to be loaded, the operations
@@ -75,12 +84,14 @@ public class TextDebugger {
 	 */
 	private final VirtualMachine vm;
 
+	private Stack<Method> methodStack;
 	private Queue<String> pendingOperations;
 	private EventRequestManager reqManager;
 	private ThreadReference curThread;
 	private int setBreakpoints = 0;
 	private int hitBreakpoints = 0;
 	private Location firstBreakpoint = null;
+	private boolean setStep = false;
 	private boolean terminate = false;
 	private String debuggee = null;
 
@@ -132,7 +143,6 @@ public class TextDebugger {
 		Map<String, Argument> args = con.defaultArguments();
 		((Argument) args.get("main")).setValue(debuggee);
 		vm = con.launch(args);
-
 		init();
 	}
 
@@ -146,27 +156,20 @@ public class TextDebugger {
 				firstBreakpoint = loc;
 				hitBreakpoints++;
 			}
-			EventRequestManager reqManager = vm.eventRequestManager();
-			BreakpointRequest req = reqManager.createBreakpointRequest(loc);
-			req.enable();
-			setBreakpoints++;
 		} catch (IncompatibleThreadStateException e) {
 			e.printStackTrace();
 		}
+		reqManager.createBreakpointRequest(loc).enable();
+		setBreakpoints++;
 	}
 
-	private void stepOver(ThreadReference thread) {
-		try {
-			StepRequest req = reqManager.createStepRequest(thread,
-					StepRequest.STEP_LINE, StepRequest.STEP_OVER);
-			req.addClassFilter("*Test"); // create step requests only in class
-											// Test
-			req.addCountFilter(1); // create step event after 1 step
-			req.enable();
-			vm.resume();
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+	private void setStep() {
+		final StepRequest req = reqManager.createStepRequest(curThread,
+				StepRequest.STEP_LINE, StepRequest.STEP_OVER);
+		req.addClassFilter("*" + debuggee);
+		req.addCountFilter(1);
+		req.enable();
+		setStep = true;
 	}
 
 	/**
@@ -179,7 +182,8 @@ public class TextDebugger {
 		}
 
 		// if there are no more breakpoints
-		if (setBreakpoints == hitBreakpoints) {
+		// FIXME not working for recurring breakpoints!
+		if (setBreakpoints == hitBreakpoints && !setStep) {
 			vm.dispose();
 		} else {
 			curThread.resume();
@@ -190,27 +194,39 @@ public class TextDebugger {
 
 		try {
 			while (true) {
-				EventSet events = q.remove();
-				EventIterator iter = events.eventIterator();
+				final EventSet events = q.remove();
+				final EventIterator iter = events.eventIterator();
 				while (iter.hasNext()) {
 					Event e = iter.nextEvent();
 					if (e instanceof BreakpointEvent) {
-						vm.suspend();
-						BreakpointEvent be = (BreakpointEvent) e;
-
-						print(HIT_BREAKPOINT, be.thread().name(), be.location()
-								.method(), be.location().lineNumber(), 0);
-
+						final BreakpointEvent be = (BreakpointEvent) e;
+						final Location loc = be.location();
+						print(HIT_BREAKPOINT, be.thread().name(), loc.method(),
+								loc.lineNumber(), loc.codeIndex());
 						hitBreakpoints++;
+						return;
+					} else if (e instanceof StepEvent) {
+						final StepEvent se = (StepEvent) e;
+						final Location loc = se.location();
+						print(STEP, ((StepEvent) e).thread().name(),
+								loc.method(), loc.lineNumber(), loc.codeIndex());
+						// delete old step
+						reqManager.deleteEventRequest(se.request());
+						setStep = false;
 						return;
 					} else if (e instanceof VMDisconnectEvent) {
 						// tell UI to terminate
 						terminate = true;
-					} else {
-						// unclassified event
-						// System.out.println(e);
-						vm.resume();
+						break;
+					} else if (e instanceof MethodEntryEvent) {
+						// push entered method on method stack
+						methodStack.push(((MethodEntryEvent) e).method());
+					} else if (e instanceof MethodExitEvent) {
+						// pop exited method from method stack
+						final Method lastMet = methodStack.pop();
+						assert ((MethodExitEvent) e).method().equals(lastMet);
 					}
+					vm.resume();
 				}
 			}
 		} catch (InterruptedException e) {
@@ -244,8 +260,9 @@ public class TextDebugger {
 
 	private void performPrintBreakpoints() {
 		final StringBuilder sb = new StringBuilder();
-		
-		final Iterator<BreakpointRequest> iter = reqManager.breakpointRequests().iterator();
+
+		final Iterator<BreakpointRequest> iter = reqManager
+				.breakpointRequests().iterator();
 		while (iter.hasNext()) {
 			final Location loc = iter.next().location();
 			sb.append("\t");
@@ -258,7 +275,6 @@ public class TextDebugger {
 				sb.append("\n");
 			}
 		}
-		
 		print(LIST_BREAKPOINTS, sb.toString());
 	}
 
@@ -298,14 +314,21 @@ public class TextDebugger {
 		}
 
 		try {
+			// supervise entered methods
 			MethodEntryRequest req = reqManager.createMethodEntryRequest();
 			if (debuggee != null)
 				req.addClassFilter(debuggee);
 			req.addThreadFilter(curThread);
 			req.enable();
 
+			// supervise exited methods
+			MethodExitRequest meReq = reqManager.createMethodExitRequest();
+			if (debuggee != null)
+				meReq.addClassFilter(debuggee);
+			meReq.addThreadFilter(curThread);
+			meReq.enable();
+
 			vm.resume();
-			curThread.resume();
 			EventQueue q = vm.eventQueue();
 
 			boolean exit = false;
@@ -320,25 +343,59 @@ public class TextDebugger {
 						while (pendingOperations.size() > 0) {
 							perform(pendingOperations.remove());
 						}
+						// push entered method to method stack
+						methodStack.push(((MethodEntryEvent) e).method());
+						// init done, tell loop to stop
 						exit = true;
 						break;
-					} else {
-						// System.out.println(e);
-						vm.resume();
-						curThread.resume();
+					} else if (e instanceof MethodExitEvent) {
+						// pop exited method from method stack
+						final Method lastMet = methodStack.pop();
+						assert ((MethodExitEvent) e).method().equals(lastMet);
 					}
+					vm.resume();
 				}
 			}
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
 
+		// FIXME 
 		if (firstBreakpoint != null) {
 			print(HIT_BREAKPOINT, curThread.name(), firstBreakpoint.method(),
 					firstBreakpoint.lineNumber(), 0);
 		} else {
 			performCont();
 		}
+	}
+
+	private void performStep() {
+		setStep();
+		performCont();
+		
+//		EventQueue q = vm.eventQueue();
+//
+//		try {
+//			while (true) {
+//				final EventSet events = q.remove();
+//				final EventIterator iter = events.eventIterator();
+//				while (iter.hasNext()) {
+//					Event e = iter.nextEvent();
+//					if (e instanceof StepEvent) {
+//						final StepEvent se = (StepEvent) e;
+//						final Location loc = se.location();
+//						print(STEP, ((StepEvent) e).thread().name(),
+//								loc.method(), loc.lineNumber(), loc.codeIndex());
+//						// delete old step
+//						reqManager.deleteEventRequest(se.request());
+//						return;
+//					}
+//					vm.resume();
+//				}
+//			}
+//		} catch (InterruptedException e) {
+//			e.printStackTrace();
+//		}
 	}
 
 	/**
@@ -391,6 +448,31 @@ public class TextDebugger {
 		}
 	}
 
+	private void performWhere() {
+		int i = 1;
+		final StringBuilder sb = new StringBuilder();
+		while (!methodStack.empty()) {
+			final Method method = methodStack.pop();
+			sb.append("\t[");
+			sb.append(i++);
+			sb.append("] ");
+			sb.append(method.declaringType().name());
+			sb.append(".");
+			sb.append(method.name());
+			try {
+				final String sourceName = method.location().sourceName();
+				sb.append(" (");
+				sb.append(sourceName);
+				sb.append(")");
+			} catch (AbsentInformationException e) {
+			}
+			if (!methodStack.empty()) {
+				sb.append("\n");
+			}
+		}
+		print(TRACE, sb.toString());
+	}
+
 	/**
 	 * True if VM is loaded, false otherwise.
 	 */
@@ -417,6 +499,7 @@ public class TextDebugger {
 	private void init() {
 		// make space for pending operations
 		pendingOperations = new ConcurrentLinkedQueue<>();
+		methodStack = new Stack<>();
 
 		// Establish Request Manager
 		reqManager = vm.eventRequestManager();
@@ -554,7 +637,6 @@ public class TextDebugger {
 		String className = null;
 		String methodName = null;
 		int lineNumber = -1;
-		StackFrame curFrame;
 
 		try {
 			switch (st.nextToken()) {
@@ -606,7 +688,7 @@ public class TextDebugger {
 							pendingOperations.add(cmd);
 						}
 						break;
-	
+
 					case "at": // e.g. "stop at MyClass:22"
 						className = st.nextToken(":").trim();
 						lineNumber = Integer.parseInt(st.nextToken());
@@ -617,7 +699,7 @@ public class TextDebugger {
 							pendingOperations.add(cmd);
 						}
 						break;
-	
+
 					default:
 						throw new UnsupportedOperationException();
 					}
@@ -625,24 +707,30 @@ public class TextDebugger {
 					// print all breakpoints
 					performPrintBreakpoints();
 				}
-				
+
+				break;
+
+			case "where":
+				performWhere();
+				break;
+
+			case "step":
+				performStep();
 				break;
 
 			case "clear":
-			case "step":
 			case "next":
 			case "catch":
 			case "ignore":
 			case "threads":
 			case "thread":
-			case "where":
 				throw new UnsupportedOperationException(cmd);
-				
+
 			case "exit":
 			case "quit":
 			case "q":
 				break;
-				
+
 			default:
 				print(USAGE);
 			}

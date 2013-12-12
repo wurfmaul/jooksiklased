@@ -31,7 +31,7 @@ public class BreakpointTest extends AbstractTest {
 		exp.append(format(SET_BREAKPOINT, MAIN, 4));
 		exp.append(format(SET_BREAKPOINT, "Test.hello(int)", 11));
 		exp.append(format(HIT_BREAKPOINT, "main", MAIN, 4, 0));
-		exp.append(format(HIT_BREAKPOINT, "main", "Test.hello(int)", 11, 0));
+		exp.append(format(HIT_BREAKPOINT, "main", "Test.hello(int)", 11, 15));
 		exp.append(EXIT);
 		assertEquals(exp.toString().trim(), out.toString().trim());
 	}
@@ -45,11 +45,11 @@ public class BreakpointTest extends AbstractTest {
 		final StringBuilder exp = new StringBuilder();
 		exp.append(format(DEFER_BREAKPOINT_LOC, "Test", 11));
 		exp.append(format(SET_BREAKPOINT, "Test.hello(int)", 11));
-		exp.append(format(HIT_BREAKPOINT, "main", "Test.hello(int)", 11, 0));
+		exp.append(format(HIT_BREAKPOINT, "main", "Test.hello(int)", 11, 15));
 		exp.append(EXIT);
 		assertEquals(exp.toString().trim(), out.toString().trim());
 	}
-	
+
 	@Test
 	public void printBreakpointTest() {
 		debugger.perform("stop in Test.main");
@@ -58,7 +58,7 @@ public class BreakpointTest extends AbstractTest {
 		debugger.perform("run");
 		debugger.perform("stop");
 		debugger.perform("exit");
-		
+
 		final String bps = "\tTest.main: 4\n\tTest.hello: 10\n\tTest.main: 5";
 		final StringBuilder sb = new StringBuilder();
 		sb.append(format(DEFER_BREAKPOINT, "Test", "main"));
