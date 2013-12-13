@@ -1,5 +1,6 @@
 package at.jku.ssw.ssw.jooksiklased.test;
 
+import static at.jku.ssw.ssw.jooksiklased.Message.BREAKPOINT_NOT_FOUND;
 import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
 import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
@@ -8,6 +9,8 @@ import static at.jku.ssw.ssw.jooksiklased.Message.RUN;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
 import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
+import static at.jku.ssw.ssw.jooksiklased.Message.VM_NOT_RUNNING;
+import static at.jku.ssw.ssw.jooksiklased.Message.VM_RUNNING;
 import static at.jku.ssw.ssw.jooksiklased.Message.format;
 import static org.junit.Assert.assertEquals;
 
@@ -46,7 +49,7 @@ public class RecursionTest extends AbstractTest {
 		exp.append(format(HIT_BREAKPOINT, "main", "Recursion.fac(int)", 14, 21));
 		assertEquals(exp.toString(), getOutput());
 	}
-	
+
 	@Test
 	public void emptyBreakpointTest() {
 		perform("stop in Recursion.empty");
@@ -54,7 +57,7 @@ public class RecursionTest extends AbstractTest {
 		perform("locals");
 		perform("step");
 		perform("cont");
-		
+
 		final StringBuilder exp = new StringBuilder();
 		exp.append(format(DEFER_BREAKPOINT, "Recursion.empty"));
 		exp.append(format(RUN, "Recursion"));
@@ -65,5 +68,31 @@ public class RecursionTest extends AbstractTest {
 		exp.append(format(EXIT));
 		assertEquals(exp.toString(), getOutput());
 	}
-	
+
+	@Test
+	public void vmStatusTest() {
+		perform("cont");
+		perform("locals");
+		perform("step");
+		perform("stop in Recursion.main");
+		perform("run");
+		perform("run");
+		perform("clear Recursion.fac");
+		perform("cont");
+
+		final StringBuilder exp = new StringBuilder();
+		exp.append(format(VM_NOT_RUNNING, "cont"));
+		exp.append(format(VM_NOT_RUNNING, "locals"));
+		exp.append(format(VM_NOT_RUNNING, "step"));
+		exp.append(format(DEFER_BREAKPOINT, "Recursion.main"));
+		exp.append(format(RUN, "Recursion"));
+		exp.append(format(SET_BREAKPOINT, "Recursion.main(" + ARGS + ")", 4));
+		exp.append(format(HIT_BREAKPOINT, "main", "Recursion.main(" + ARGS
+				+ ")", 4, 0));
+		exp.append(format(VM_RUNNING));
+		exp.append(format(BREAKPOINT_NOT_FOUND, "Recursion.fac"));
+		exp.append(format(EXIT));
+		assertEquals(exp.toString(), getOutput());
+	}
+
 }

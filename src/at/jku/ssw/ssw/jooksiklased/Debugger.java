@@ -92,7 +92,7 @@ public abstract class Debugger {
 	protected static final int DEFAULT_PORT = 8000;
 	
 	/** Mapping from command to a boolean whether the vm has to be loaded. */
-	private static final Map<String, Status> NEEDS_LOADED_VM;
+	private static final Map<String, Status> NEEDS_STATUS;
 
 	/** Flags if the vm is still active. */
 	protected Status status = NOT_YET_RUNNING;
@@ -185,14 +185,15 @@ public abstract class Debugger {
 		// e.g. "cont" needs the vm to be running
 		// "run" needs the vm to be stopped
 		// commands that are not listed here don't care about the status
-		NEEDS_LOADED_VM = new HashMap<>();
-		NEEDS_LOADED_VM.put("cont", RUNNING);
-		NEEDS_LOADED_VM.put("dump", RUNNING);
-		NEEDS_LOADED_VM.put("next", RUNNING);
-		NEEDS_LOADED_VM.put("print", RUNNING);
-		NEEDS_LOADED_VM.put("run", NOT_YET_RUNNING);
-		NEEDS_LOADED_VM.put("step", RUNNING);
-		NEEDS_LOADED_VM.put("where", RUNNING);
+		NEEDS_STATUS = new HashMap<>();
+		NEEDS_STATUS.put("cont", RUNNING);
+		NEEDS_STATUS.put("dump", RUNNING);
+		NEEDS_STATUS.put("locals", RUNNING);
+		NEEDS_STATUS.put("next", RUNNING);
+		NEEDS_STATUS.put("print", RUNNING);
+		NEEDS_STATUS.put("run", NOT_YET_RUNNING);
+		NEEDS_STATUS.put("step", RUNNING);
+		NEEDS_STATUS.put("where", RUNNING);
 	}
 
 	/**
@@ -742,12 +743,13 @@ public abstract class Debugger {
 			final String command = st.nextToken();
 			
 			// check whether the machine should be running for the command
-			final Status wantedStatus = NEEDS_LOADED_VM.get(command);
+			final Status wantedStatus = NEEDS_STATUS.get(command);
 			if(wantedStatus != null && wantedStatus != status){
 				if (wantedStatus == RUNNING)
 					print(VM_NOT_RUNNING, command);
 				else 
 					print(VM_RUNNING);
+				return;
 			}
 			
 			// perform action according to command
