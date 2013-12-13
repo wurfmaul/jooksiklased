@@ -17,6 +17,4 @@ public class Recursion {
 	public static void empty() {
 	}
 	
-	public class Empty {
-	}
 }

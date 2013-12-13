@@ -1,5 +1,8 @@
 package at.jku.ssw.ssw.jooksiklased;
 
+import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.NOT_YET_RUNNING;
+import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.RUNNING;
+import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.TERMINATED;
 import static at.jku.ssw.ssw.jooksiklased.Message.BREAKPOINT_NOT_FOUND;
 import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
@@ -8,7 +11,10 @@ import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.INVALID_CMD;
 import static at.jku.ssw.ssw.jooksiklased.Message.LIST_BREAKPOINTS;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELD;
+import static at.jku.ssw.ssw.jooksiklased.Message.NO_LOCALS;
+import static at.jku.ssw.ssw.jooksiklased.Message.NO_METHOD;
 import static at.jku.ssw.ssw.jooksiklased.Message.REMOVE_BREAKPOINT;
+import static at.jku.ssw.ssw.jooksiklased.Message.RUN;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
 import static at.jku.ssw.ssw.jooksiklased.Message.TOO_MANY_ARGS;
@@ -18,11 +24,11 @@ import static at.jku.ssw.ssw.jooksiklased.Message.USAGE;
 import static at.jku.ssw.ssw.jooksiklased.Message.VAR;
 import static at.jku.ssw.ssw.jooksiklased.Message.VM_NOT_RUNNING;
 import static at.jku.ssw.ssw.jooksiklased.Message.VM_RUNNING;
-import static at.jku.ssw.ssw.jooksiklased.Message.*;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayDeque;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -84,12 +90,12 @@ import com.sun.tools.jdi.ObjectReferenceImpl;
  */
 public abstract class Debugger {
 	protected static final int DEFAULT_PORT = 8000;
-	protected static final int RUNNING = 0;
-	protected static final int TERMINATED = 1;
-	protected static final int NOT_YET_RUNNING = 2;
+	
+	/** Mapping from command to a boolean whether the vm has to be loaded. */
+	private static final Map<String, Status> NEEDS_LOADED_VM;
 
 	/** Flags if the vm is still active. */
-	protected int status = NOT_YET_RUNNING;
+	protected Status status = NOT_YET_RUNNING;
 	/** Output stream of debugger. */
 	protected OutputStream out = System.out;
 
@@ -174,6 +180,20 @@ public abstract class Debugger {
 			e.printStackTrace();
 		}
 	}
+	
+	static {
+		// e.g. "cont" needs the vm to be running
+		// "run" needs the vm to be stopped
+		// commands that are not listed here don't care about the status
+		NEEDS_LOADED_VM = new HashMap<>();
+		NEEDS_LOADED_VM.put("cont", RUNNING);
+		NEEDS_LOADED_VM.put("dump", RUNNING);
+		NEEDS_LOADED_VM.put("next", RUNNING);
+		NEEDS_LOADED_VM.put("print", RUNNING);
+		NEEDS_LOADED_VM.put("run", NOT_YET_RUNNING);
+		NEEDS_LOADED_VM.put("step", RUNNING);
+		NEEDS_LOADED_VM.put("where", RUNNING);
+	}
 
 	/**
 	 * Initializes fields that re necessary for both constructors.
@@ -231,7 +251,7 @@ public abstract class Debugger {
 	 * @param breakpoint
 	 */
 	private void performClear(final Breakpoint breakpoint) {
-		if (!isLoaded()) {
+		if (status == NOT_YET_RUNNING) {
 			// find within pending breakpoints
 			if (pendingBreakpoints.remove(breakpoint)) {
 				print(REMOVE_BREAKPOINT, breakpoint);
@@ -264,11 +284,6 @@ public abstract class Debugger {
 	 * started.
 	 */
 	private void performCont() {
-		if (!isLoaded()) {
-			print(VM_NOT_RUNNING);
-			return;
-		}
-
 		// let threads run
 		curThread.resume();
 		vm.resume();
@@ -447,12 +462,7 @@ public abstract class Debugger {
 	 * This method starts the VM and stops at first method entry.
 	 */
 	private void performRun() {
-		if (isLoaded()) {
-			print(VM_RUNNING);
-			return;
-		} else {
-			print(RUN, debuggee);
-		}
+		print(RUN, debuggee);
 
 		// supervise entered methods
 		MethodEntryRequest req = reqManager.createMethodEntryRequest();
@@ -480,6 +490,8 @@ public abstract class Debugger {
 					if (e instanceof MethodEntryEvent) {
 						// push entered method to method stack
 						methodStack.push(((MethodEntryEvent) e).method());
+						// tell everyone that we are running
+						status = RUNNING;
 						// init done, tell loop to stop
 						exit = true;
 						curThread.suspend();
@@ -591,19 +603,6 @@ public abstract class Debugger {
 			}
 		}
 		print(TRACE, sb.toString());
-	}
-
-	/**
-	 * Determines whether the vm is loaded or not.
-	 * 
-	 * @return True if VM is loaded, false otherwise.
-	 */
-	private boolean isLoaded() {
-		try {
-			return curThread.frameCount() > 0;
-		} catch (IncompatibleThreadStateException e) {
-		}
-		return true;
 	}
 
 	/**
@@ -738,9 +737,21 @@ public abstract class Debugger {
 		String className = null;
 		String methodName;
 		int lineNumber;
-
+		
 		try {
-			switch (st.nextToken()) {
+			final String command = st.nextToken();
+			
+			// check whether the machine should be running for the command
+			final Status wantedStatus = NEEDS_LOADED_VM.get(command);
+			if(wantedStatus != null && wantedStatus != status){
+				if (wantedStatus == RUNNING)
+					print(VM_NOT_RUNNING, command);
+				else 
+					print(VM_RUNNING);
+			}
+			
+			// perform action according to command
+			switch (command) {
 			case "run":
 				performRun();
 				break;
@@ -795,7 +806,7 @@ public abstract class Debugger {
 						throw new UnsupportedOperationException();
 					}
 
-					if (isLoaded()) {
+					if (status == RUNNING) {
 						performStop(breakpoint);
 					} else {
 						print(DEFER_BREAKPOINT, breakpoint);
@@ -863,5 +874,9 @@ public abstract class Debugger {
 			}
 			print(TOO_MANY_ARGS, sb.toString().trim());
 		}
+	}
+	
+	static enum Status {
+		RUNNING, TERMINATED, NOT_YET_RUNNING;
 	}
 }

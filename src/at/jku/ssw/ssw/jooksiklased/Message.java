@@ -29,7 +29,7 @@ public enum Message {
 			+ "/ step / next / catch / ignore"), 
 	VAR("%s %s = %s"), 
 	VM_ERROR("%s"), 
-	VM_NOT_RUNNING("Command 'cont' is not valid until the VM is started with "
+	VM_NOT_RUNNING("Command '%s' is not valid until the VM is started with "
 			+ "the 'run' command"), 
 	VM_RUNNING("VM already running. Use 'cont' to continue after events.");
 

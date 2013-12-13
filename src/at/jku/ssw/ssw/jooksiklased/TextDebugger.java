@@ -35,7 +35,7 @@ public class TextDebugger extends Debugger {
 		int retValue = 0;
 		String cmd;
 
-		while (!terminate && status != TERMINATED) {
+		while (!terminate && status != Status.TERMINATED) {
 			try {
 				System.out.print("> ");
 				cmd = in.readLine().trim();
