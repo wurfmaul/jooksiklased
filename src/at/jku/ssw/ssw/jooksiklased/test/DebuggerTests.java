@@ -5,7 +5,7 @@ import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
 
 @RunWith(Suite.class)
-@SuiteClasses({ BreakpointTest.class, VarTest.class, RecursionTest.class })
+@SuiteClasses({ BreakpointTest.class, VarTest.class, RecursionTest.class, OverloadTest.class })
 public class DebuggerTests {
 
 }

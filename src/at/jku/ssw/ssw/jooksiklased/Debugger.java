@@ -10,6 +10,7 @@ import static at.jku.ssw.ssw.jooksiklased.Message.FIELD;
 import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.INVALID_CMD;
 import static at.jku.ssw.ssw.jooksiklased.Message.LIST_BREAKPOINTS;
+import static at.jku.ssw.ssw.jooksiklased.Message.METHOD_OVERLOAD;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELD;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_LOCALS;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_METHOD;
@@ -90,7 +91,7 @@ import com.sun.tools.jdi.ObjectReferenceImpl;
  */
 public abstract class Debugger {
 	protected static final int DEFAULT_PORT = 8000;
-	
+
 	/** Mapping from command to a boolean whether the vm has to be loaded. */
 	private static final Map<String, Status> NEEDS_STATUS;
 
@@ -123,11 +124,7 @@ public abstract class Debugger {
 	protected Debugger(final int port) {
 		// find attaching connector
 		AttachingConnector con = null;
-		// TODO get rid of indirect iterator
-		Iterator<Connector> iter = Bootstrap.virtualMachineManager()
-				.allConnectors().iterator();
-		while (iter.hasNext()) {
-			Connector x = (Connector) iter.next();
+		for (Connector x : Bootstrap.virtualMachineManager().allConnectors()) {
 			if (x.name().equals("com.sun.jdi.SocketAttach"))
 				con = (AttachingConnector) x;
 		}
@@ -180,7 +177,7 @@ public abstract class Debugger {
 			e.printStackTrace();
 		}
 	}
-	
+
 	static {
 		// e.g. "cont" needs the vm to be running
 		// "run" needs the vm to be stopped
@@ -188,6 +185,7 @@ public abstract class Debugger {
 		NEEDS_STATUS = new HashMap<>();
 		NEEDS_STATUS.put("cont", RUNNING);
 		NEEDS_STATUS.put("dump", RUNNING);
+		NEEDS_STATUS.put("fields", RUNNING);
 		NEEDS_STATUS.put("locals", RUNNING);
 		NEEDS_STATUS.put("next", RUNNING);
 		NEEDS_STATUS.put("print", RUNNING);
@@ -320,14 +318,14 @@ public abstract class Debugger {
 						methodStack.push(mee.method());
 
 						// do not resume vm if a breakpoint is reached
-						boolean isBreakpoint = true;
+						boolean isBreakpoint = false;
 						for (BreakpointRequest bpr : reqManager
 								.breakpointRequests()) {
 							if (bpr.location().equals(mee.location())) {
-								isBreakpoint = false;
+								isBreakpoint = true;
 							}
 						}
-						if (isBreakpoint) {
+						if (!isBreakpoint) {
 							vm.resume();
 						}
 
@@ -371,7 +369,7 @@ public abstract class Debugger {
 	private void performLocals() {
 		try {
 			final StackFrame curFrame = curThread.frame(0);
-			if(curFrame.visibleVariables().size() > 0) {
+			if (curFrame.visibleVariables().size() > 0) {
 				for (LocalVariable var : curFrame.visibleVariables()) {
 					String value = valueToString(curFrame.getValue(var), false);
 					print(VAR, var.typeName(), var.name(), value);
@@ -553,13 +551,12 @@ public abstract class Debugger {
 				assert locs.size() == 1;
 				setBreakpoint(locs.get(0));
 			} catch (AbsentInformationException e) {
-				e.printStackTrace(); // TODO EMPTY_CLASS ?
+				e.printStackTrace();
 			}
 		} else {
 			// find location by method name
 			final List<Method> methods = findClass(className).methodsByName(
 					methodName);
-			assert methods.size() <= 1;
 
 			if (methods.size() == 1) {
 				Method method = methods.get(0);
@@ -570,10 +567,12 @@ public abstract class Debugger {
 					assert locs.size() > 0;
 					setBreakpoint(locs.get(0));
 				} catch (AbsentInformationException e) {
-					e.printStackTrace(); // TODO METHOD_EMPTY ?
+					e.printStackTrace();
 				}
+			} else if (methods.size() == 0) {
+				print(NO_METHOD, breakpoint, methodName, className);
 			} else {
-				print(NO_METHOD, className, methodName, methodName, className);
+				print(METHOD_OVERLOAD, breakpoint, methodName);
 			}
 		}
 	}
@@ -738,20 +737,20 @@ public abstract class Debugger {
 		String className = null;
 		String methodName;
 		int lineNumber;
-		
+
 		try {
 			final String command = st.nextToken();
-			
+
 			// check whether the machine should be running for the command
 			final Status wantedStatus = NEEDS_STATUS.get(command);
-			if(wantedStatus != null && wantedStatus != status){
+			if (wantedStatus != null && wantedStatus != status) {
 				if (wantedStatus == RUNNING)
 					print(VM_NOT_RUNNING, command);
-				else 
+				else
 					print(VM_RUNNING);
 				return;
 			}
-			
+
 			// perform action according to command
 			switch (command) {
 			case "run":
@@ -877,7 +876,7 @@ public abstract class Debugger {
 			print(TOO_MANY_ARGS, sb.toString().trim());
 		}
 	}
-	
+
 	static enum Status {
 		RUNNING, TERMINATED, NOT_YET_RUNNING;
 	}

@@ -15,8 +15,9 @@ public enum Message {
 	HIT_BREAKPOINT("Breakpoint hit: \"thread=" + "%s\", %s, line=%d bci=%d"), 
 	INVALID_CMD("Command not valid: '%s'"), 
 	LIST_BREAKPOINTS("Breakpoints set:\n%s"), 
+	METHOD_OVERLOAD("Unable to set breakpoint %s: Method %s is overloaded"),
 	NO_FIELD("No static field or method with the name %s in %s"), 
-	NO_METHOD("Unable to set deferred breakpoint %s.%s : No method %s in %s"), 
+	NO_METHOD("Unable to set breakpoint %s : No method %s in %s"), 
 	NO_LOCALS("No local variables"),
 	REMOVE_BREAKPOINT("Removed: breakpoint %s"),
 	RUN("run %s"),
@@ -26,9 +27,8 @@ public enum Message {
 	TRACE("%s"), 
 	UNKNOWN("Name unknown: %s"), 
 	USAGE("run / cont / print / dump / threads / thread / where / stop / clear "
-			+ "/ step / next / catch / ignore"), 
-	VAR("%s %s = %s"), 
-	VM_ERROR("%s"), 
+			+ "/ step / next / catch / ignore"), // TODO formulate usage info
+	VAR("%s %s = %s"),
 	VM_NOT_RUNNING("Command '%s' is not valid until the VM is started with "
 			+ "the 'run' command"), 
 	VM_RUNNING("VM already running. Use 'cont' to continue after events.");
