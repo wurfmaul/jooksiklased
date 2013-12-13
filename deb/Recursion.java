@@ -2,6 +2,7 @@ public class Recursion {
 
 	public static void main(String[] args) {
 		fac(7);
+		empty();
 	}
 
 	public static int fac(int i) {
@@ -13,7 +14,7 @@ public class Recursion {
 		return retValue;
 	}
 	
-	public void emptyMethod() {
+	public static void empty() {
 	}
 	
 	public class Empty {

@@ -355,9 +355,13 @@ public abstract class Debugger {
 	private void performLocals() {
 		try {
 			final StackFrame curFrame = curThread.frame(0);
-			for (LocalVariable var : curFrame.visibleVariables()) {
-				String value = valueToString(curFrame.getValue(var), false);
-				print(VAR, var.typeName(), var.name(), value);
+			if(curFrame.visibleVariables().size() > 0) {
+				for (LocalVariable var : curFrame.visibleVariables()) {
+					String value = valueToString(curFrame.getValue(var), false);
+					print(VAR, var.typeName(), var.name(), value);
+				}
+			} else {
+				print(NO_LOCALS);
 			}
 		} catch (IncompatibleThreadStateException e) {
 			e.printStackTrace();
@@ -446,6 +450,8 @@ public abstract class Debugger {
 		if (isLoaded()) {
 			print(VM_RUNNING);
 			return;
+		} else {
+			print(RUN, debuggee);
 		}
 
 		// supervise entered methods

@@ -40,12 +40,12 @@ public abstract class AbstractTest {
 	}
 
 	/**
-	 * Gets the debugger's output stream and converts it to trimmed string.
+	 * Gets the debugger's output stream and converts it to string.
 	 * 
-	 * @return Trimmed string representation of output stream.
+	 * @return String representation of output stream.
 	 */
 	protected String getOutput() {
-		return debugger.getOut().toString().trim();
+		return debugger.getOut().toString();
 	}
 
 	/**

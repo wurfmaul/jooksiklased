@@ -3,6 +3,7 @@ package at.jku.ssw.ssw.jooksiklased.test;
 import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
 import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
+import static at.jku.ssw.ssw.jooksiklased.Message.RUN;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
 import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
@@ -29,6 +30,7 @@ public class VarTest extends AbstractTest {
 
 		final StringBuilder exp = new StringBuilder();
 		exp.append(format(DEFER_BREAKPOINT, "Calc:16"));
+		exp.append(format(RUN, "Calc"));
 		exp.append(format(SET_BREAKPOINT, MAIN, 16));
 		exp.append(format(HIT_BREAKPOINT, "main", MAIN, 16, 20));
 		exp.append(format(VAR, ARGS, "args", "instance of " + ARGS + " (id=0)"));
@@ -36,7 +38,7 @@ public class VarTest extends AbstractTest {
 		exp.append(format(VAR, "int", "tmp", "42"));
 		exp.append(format(VAR, "boolean", "cmp", "true"));
 		exp.append(EXIT);
-		assertEqualsIgnoreId(exp.toString().trim(), getOutput());
+		assertEqualsIgnoreId(exp.toString(), getOutput());
 	}
 
 	@Test
@@ -53,6 +55,7 @@ public class VarTest extends AbstractTest {
 		final String args = "{}";
 		final StringBuilder exp = new StringBuilder();
 		exp.append(format(DEFER_BREAKPOINT, "Calc:16"));
+		exp.append(format(RUN, "Calc"));
 		exp.append(format(SET_BREAKPOINT, MAIN, 16));
 		exp.append(format(HIT_BREAKPOINT, "main", MAIN, 16, 20));
 		exp.append(format(VAR, "Calc", "c", "instance of Calc (id=0)"));
@@ -60,7 +63,7 @@ public class VarTest extends AbstractTest {
 		exp.append(format(VAR, ARGS, "args", "instance of " + ARGS + " (id=0)"));
 		exp.append(format(VAR, ARGS, "args", args));
 		exp.append(EXIT);
-		assertEqualsIgnoreId(exp.toString().trim(), getOutput());
+		assertEqualsIgnoreId(exp.toString(), getOutput());
 	}
 
 	@Test
@@ -74,11 +77,12 @@ public class VarTest extends AbstractTest {
 				+ "\t[2] Calc.main (Calc.java)";
 		final StringBuilder exp = new StringBuilder();
 		exp.append(format(DEFER_BREAKPOINT, "Calc:26"));
+		exp.append(format(RUN, "Calc"));
 		exp.append(format(SET_BREAKPOINT, "Calc.calc(float)", 26));
 		exp.append(format(HIT_BREAKPOINT, "main", "Calc.calc(float)", 26, 14));
 		exp.append(format(TRACE, trace));
-		exp.append(EXIT);
-		assertEquals(exp.toString().trim(), getOutput());
+		exp.append(format(EXIT));
+		assertEquals(exp.toString(), getOutput());
 	}
 
 	@Test
@@ -92,13 +96,14 @@ public class VarTest extends AbstractTest {
 
 		final StringBuilder exp = new StringBuilder();
 		exp.append(format(DEFER_BREAKPOINT, "Calc.calc"));
+		exp.append(format(RUN, "Calc"));
 		exp.append(format(SET_BREAKPOINT, "Calc.calc(float)", 24));
 		exp.append(format(HIT_BREAKPOINT, "main", "Calc.calc(float)", 24, 0));
 		exp.append(format(VAR, "float", "val", "2.0"));
 		exp.append(format(STEP, "main", "Calc.calc(float)", 25, 9));
 		exp.append(format(VAR, "float", "val", "2.0"));
 		exp.append(format(VAR, "double", "tmp", "25.0"));
-		exp.append(EXIT);
-		assertEquals(exp.toString().trim(), getOutput());
+		exp.append(format(EXIT));
+		assertEquals(exp.toString(), getOutput());
 	}
 }
