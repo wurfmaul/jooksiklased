@@ -3,59 +3,49 @@ package at.jku.ssw.ssw.jooksiklased.test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.PrintStream;
 import java.util.StringTokenizer;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.ComparisonFailure;
 
-import at.jku.ssw.ssw.jooksiklased.Message;
-import at.jku.ssw.ssw.jooksiklased.TextDebugger;
+import at.jku.ssw.ssw.jooksiklased.TestDebugger;
 
-import com.sun.jdi.connect.IllegalConnectorArgumentsException;
-import com.sun.jdi.connect.VMStartException;
-
+/**
+ * Superclass of all test classes. Implements important functionality and
+ * provides access to the debugger object.
+ * 
+ * @author wurfmaul <wurfmaul@posteo.at>
+ * 
+ */
 public abstract class AbstractTest {
 	private static final String KEY_ID_OPEN = "(id=";
 	private static final String KEY_ID_CLOSE = ")";
-	
-	protected TextDebugger debugger;
-	protected PrintStream backup;
-	protected ByteArrayOutputStream out;
+
+	protected TestDebugger debugger;
 	protected String classUnderTest;
 
 	@Before
 	public void setUp() throws Exception {
-		try {
-			backup = System.out;
-			out = new ByteArrayOutputStream();
-			System.setOut(new PrintStream(out, true));
-
-			debugger = new TextDebugger(classUnderTest);
-		} catch (IOException | IllegalConnectorArgumentsException
-				| VMStartException e) {
-		}
-	}
-
-	@After
-	public void tearDown() throws Exception {
-		System.setOut(backup);
+		debugger = new TestDebugger(classUnderTest);
 	}
 
 	/**
-	 * Simulates the behavior of Message.print, but returns String instead.
+	 * Interface between test cases and debugger itself.
 	 * 
-	 * @param msg
-	 *            One of enum Message.
-	 * @param args
-	 *            Arguments for format string.
-	 * @return The formatted string.
+	 * @param cmd
+	 *            The command which is to be passed to the debugger
 	 */
-	protected static String format(Message msg, Object... args) {
-		return String.format(msg + "\n", args);
+	protected void perform(String cmd) {
+		debugger.perform(cmd);
+	}
+
+	/**
+	 * Gets the debugger's output stream and converts it to trimmed string.
+	 * 
+	 * @return Trimmed string representation of output stream.
+	 */
+	protected String getOutput() {
+		return debugger.getOut().toString().trim();
 	}
 
 	/**

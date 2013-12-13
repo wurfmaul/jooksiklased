@@ -36,13 +36,13 @@ public enum Message {
 	private Message(String msg) {
 		this.msg = msg;
 	}
-
-	static void print(Message msg, Object... args) {
-		System.out.printf(msg.msg + "\n", args);
+	
+	public String format(Object...args) {
+		return String.format(msg + "\n", args);
 	}
-
-	static void error(Message msg, Object... args) {
-		System.err.printf(msg.msg + "\n", args);
+	
+	public static String format(Message msg, Object...args) {
+		return msg.format(args);
 	}
 
 	@Override

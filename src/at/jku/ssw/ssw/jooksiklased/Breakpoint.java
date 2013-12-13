@@ -3,7 +3,8 @@ package at.jku.ssw.ssw.jooksiklased;
 /**
  * Represents a breakpoint which has not yet been worked with. The structure
  * simplifies dealing with breakpoint prototypes (e.g. setting or removing
- * breakpoints before class is loaded).
+ * breakpoints before class is loaded). Consider an object as this class as
+ * dummy breakpoint.
  * 
  * @author wurfmaul <wurfmaul@posteo.at>
  * 
