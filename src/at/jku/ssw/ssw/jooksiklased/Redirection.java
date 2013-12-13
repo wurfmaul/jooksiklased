@@ -8,6 +8,13 @@ import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
 
+/**
+ * Thread that redirects specified output stream to specified input stream. Used
+ * to print output of debuggee in debugger.
+ * 
+ * @author wurfmaul <wurfmaul@posteo.at>
+ * 
+ */
 public class Redirection extends Thread {
 	private final Reader in;
 	private final Writer out;

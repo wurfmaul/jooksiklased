@@ -80,7 +80,7 @@ import com.sun.tools.jdi.ObjectReferenceImpl;
 /**
  * Main class of debugger. Contains the main loop of the interface
  * 
- * @author Wolfgang Küllinger (0955711)
+ * @author wurfmaul <wurfmaul@posteo.at>
  * 
  */
 public class TextDebugger {

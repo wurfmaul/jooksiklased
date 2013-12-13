@@ -5,7 +5,7 @@ package at.jku.ssw.ssw.jooksiklased;
  * simplifies dealing with breakpoint prototypes (e.g. setting or removing
  * breakpoints before class is loaded).
  * 
- * @author Wolfgang Küllinger (0955711)
+ * @author wurfmaul <wurfmaul@posteo.at>
  * 
  */
 class Breakpoint {
