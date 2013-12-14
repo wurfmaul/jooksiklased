@@ -2,13 +2,12 @@ package at.jku.ssw.ssw.jooksiklased.test;
 
 import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
+import static at.jku.ssw.ssw.jooksiklased.Message.FIELD;
 import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
-import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELD;
 import static at.jku.ssw.ssw.jooksiklased.Message.RUN;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
 import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
-import static at.jku.ssw.ssw.jooksiklased.Message.UNKNOWN;
 import static at.jku.ssw.ssw.jooksiklased.Message.VAR;
 import static at.jku.ssw.ssw.jooksiklased.Message.format;
 import static org.junit.Assert.assertEquals;
@@ -124,8 +123,8 @@ public class VarTest extends AbstractTest {
 		exp.append(format(RUN, "Calc"));
 		exp.append(format(SET_BREAKPOINT, MAIN, 13));
 		exp.append(format(HIT_BREAKPOINT, "main", MAIN, 13, 0));
-		exp.append(format(NO_FIELD, "d", "Calc"));
-		exp.append(format(UNKNOWN, "d"));
+		exp.append(format(FIELD, "long", "Calc.d"));
+		exp.append(format(FIELD, "long", "d"));
 		exp.append(format(STEP, "main", MAIN, 14, 8));
 		exp.append(format(VAR, "long", "d", "8"));
 		exp.append(format(EXIT));

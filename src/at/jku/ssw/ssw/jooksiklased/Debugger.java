@@ -32,6 +32,7 @@ import com.sun.jdi.LocalVariable;
 import com.sun.jdi.Location;
 import com.sun.jdi.LongValue;
 import com.sun.jdi.Method;
+import com.sun.jdi.ObjectReference;
 import com.sun.jdi.ReferenceType;
 import com.sun.jdi.ShortValue;
 import com.sun.jdi.StackFrame;
@@ -394,45 +395,63 @@ public abstract class Debugger {
 	 * Prints one specific field of given class.
 	 * 
 	 * @param className
-	 *            Name of class which contains the field
+	 *            Name of class which contains the field or null for the current
+	 *            position
 	 * @param fieldName
-	 *            Name of field which is about to be displayed.
+	 *            Name of field or local variable which is about to be
+	 *            displayed.
 	 * @param dump
 	 *            True if complex structures like classes or arrays should be
 	 *            printed including their contents. False if only the name and
 	 *            id should be printed.
 	 */
-	private void performPrintField(final String className,
-			final String fieldName, final boolean dump) {
-		final ReferenceType clazz = findClass(className);
-		final Field f = clazz.fieldByName(fieldName);
-		if (f != null && f.isStatic())
-			print(VAR, f.typeName(), f.name(),
-					valueToString(clazz.getValue(f), dump));
-		else
-			print(NO_FIELD, fieldName, className);
-	}
-
-	/**
-	 * Prints one specific field of given class.
-	 * 
-	 * @param varName
-	 *            Name of local variable which is about to be displayed.
-	 * @param dump
-	 *            True if complex structures like classes or arrays should be
-	 *            printed including their contents. False if only the name and
-	 *            id should be printed.
-	 */
-	private void performPrintLocal(final String varName, final boolean dump) {
-		try {
-			StackFrame curFrame = curThread.frame(0);
-			final LocalVariable var = curFrame.visibleVariableByName(varName);
-			if (var != null) {
-				final String value = valueToString(curFrame.getValue(var), dump);
-				print(VAR, var.typeName(), var.name(), value);
+	private void performPrint(String className, String varName, boolean dump) {
+		if (className != null) {
+			final ReferenceType clazz = findClass(className);
+			final Field f = clazz.fieldByName(varName);
+			if (f == null) {
+				print(NO_FIELD, varName, className);
+			} else if (f.isStatic()) {
+				final String value = valueToString(clazz.getValue(f), dump);
+				print(VAR, f.typeName(), f.name(), value);
 			} else {
-				print(UNKNOWN, varName);
+				print(FIELD, f.typeName(), className + "." + f.name());
 			}
+			return;
+		}
+		// className = null
+		try {
+			final StackFrame curFrame = curThread.frame(0);
+			LocalVariable var = curFrame.visibleVariableByName(varName);
+			if (var != null) {
+				// local variable
+				String value = valueToString(curFrame.getValue(var), dump);
+				print(VAR, var.typeName(), var.name(), value);
+				return;
+			}
+			final ReferenceType type = curFrame.location().declaringType();
+			final Field f = type.fieldByName(varName);
+			if (f == null) {
+				print(UNKNOWN, varName);
+				return;
+			}
+			// instance variable of static method
+			Value val;
+			if(curFrame.location().method().isStatic()) {
+				final List<ObjectReference> instances = type.instances(0);
+				if(instances.size() == 0) {
+					// class not yet initiated
+					print(FIELD, f.typeName(), f.name());
+					return;
+				}
+				// class already initiated
+				assert instances.size() == 1;
+				ObjectReference ref = instances.get(0);
+				val = ref.getValue(f);
+			} else {
+				val = curFrame.thisObject().getValue(f);
+			}
+			print(VAR, f.typeName(), f.name(), valueToString(val, dump));
 		} catch (IncompatibleThreadStateException e) {
 			e.printStackTrace();
 		} catch (AbsentInformationException e) {
@@ -719,7 +738,7 @@ public abstract class Debugger {
 		StringTokenizer st = new StringTokenizer(cmd, " .");
 		Breakpoint breakpoint;
 		String className = null;
-		String methodName;
+		String methodName, varName;
 		int lineNumber;
 
 		try {
@@ -745,12 +764,16 @@ public abstract class Debugger {
 				performCont();
 				break;
 
+			case "dump":
 			case "print":
-				className = st.nextToken();
+				varName = st.nextToken().trim();
 				if (st.hasMoreTokens()) {
-					performPrintField(className.trim(), st.nextToken(), false);
+					// class.field
+					performPrint(varName, st.nextToken(),
+							command.equals("dump"));
 				} else {
-					performPrintLocal(className.trim(), false);
+					// var
+					performPrint(null, varName, command.equals("dump"));
 				}
 				break;
 
@@ -760,15 +783,6 @@ public abstract class Debugger {
 
 			case "fields":
 				performFields(st.nextToken().trim());
-				break;
-
-			case "dump":
-				className = st.nextToken();
-				if (st.hasMoreTokens()) {
-					performPrintField(className.trim(), st.nextToken(), true);
-				} else {
-					performPrintLocal(className.trim(), true);
-				}
 				break;
 
 			case "stop":
