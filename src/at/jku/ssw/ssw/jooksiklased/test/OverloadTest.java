@@ -23,5 +23,18 @@ public class OverloadTest extends AbstractTest {
 		exp.append(format(EXIT));
 		assertEquals(exp.toString(), getOutput());
 	}
+	
+	@Test 
+	public void invalidCmdTest() {
+		perform("stopp please");
+		perform("do something");
+		perform("run");
+		
+		final StringBuilder exp = new StringBuilder();
+		exp.append(format(INVALID_CMD, "stopp please"));
+		exp.append(format(INVALID_CMD, "do something"));
+		exp.append(format(EXIT));
+		assertEquals(exp.toString(), getOutput());
+	}
 
 }

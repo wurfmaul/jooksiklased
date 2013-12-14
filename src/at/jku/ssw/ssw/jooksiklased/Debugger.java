@@ -219,6 +219,8 @@ public abstract class Debugger {
 				break;
 			}
 		}
+		
+		assert curThread != null;
 	}
 
 	/**
@@ -283,8 +285,7 @@ public abstract class Debugger {
 	 * started.
 	 */
 	private void performCont() {
-		// let threads run
-		curThread.resume();
+		// let vm run
 		vm.resume();
 
 		// listen for events
@@ -321,9 +322,8 @@ public abstract class Debugger {
 						boolean isBreakpoint = false;
 						for (BreakpointRequest bpr : reqManager
 								.breakpointRequests()) {
-							if (bpr.location().equals(mee.location())) {
+							if (bpr.location().equals(mee.location()))
 								isBreakpoint = true;
-							}
 						}
 						if (!isBreakpoint) {
 							vm.resume();
@@ -493,7 +493,6 @@ public abstract class Debugger {
 						status = RUNNING;
 						// init done, tell loop to stop
 						exit = true;
-						curThread.suspend();
 						break;
 					} else {
 						assert e instanceof VMStartEvent;
@@ -509,7 +508,6 @@ public abstract class Debugger {
 		while (pendingBreakpoints.size() > 0) {
 			performStop(pendingBreakpoints.remove());
 		}
-
 		if (curThread.isAtBreakpoint()) {
 			try {
 				final Location bp = curThread.frame(0).location();
@@ -721,7 +719,10 @@ public abstract class Debugger {
 	 * Close connections, terminate VM
 	 */
 	protected void close() {
-		vm.dispose();
+		try {
+			vm.dispose();
+		} catch (VMDisconnectedException e) {
+		}
 	}
 
 	/**
