@@ -3,10 +3,12 @@ package at.jku.ssw.ssw.jooksiklased.test;
 import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
 import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
+import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELD;
 import static at.jku.ssw.ssw.jooksiklased.Message.RUN;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
 import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
+import static at.jku.ssw.ssw.jooksiklased.Message.UNKNOWN;
 import static at.jku.ssw.ssw.jooksiklased.Message.VAR;
 import static at.jku.ssw.ssw.jooksiklased.Message.format;
 import static org.junit.Assert.assertEquals;
@@ -103,6 +105,29 @@ public class VarTest extends AbstractTest {
 		exp.append(format(STEP, "main", "Calc.calc(float)", 25, 9));
 		exp.append(format(VAR, "float", "val", "2.0"));
 		exp.append(format(VAR, "double", "tmp", "25.0"));
+		exp.append(format(EXIT));
+		assertEquals(exp.toString(), getOutput());
+	}
+
+	@Test
+	public void fieldTest() {
+		perform("stop in Calc.main");
+		perform("run");
+		perform("print Calc.d");
+		perform("print d");
+		perform("step");
+		perform("print d");
+		perform("cont");
+
+		final StringBuilder exp = new StringBuilder();
+		exp.append(format(DEFER_BREAKPOINT, "Calc.main"));
+		exp.append(format(RUN, "Calc"));
+		exp.append(format(SET_BREAKPOINT, MAIN, 13));
+		exp.append(format(HIT_BREAKPOINT, "main", MAIN, 13, 0));
+		exp.append(format(NO_FIELD, "d", "Calc"));
+		exp.append(format(UNKNOWN, "d"));
+		exp.append(format(STEP, "main", MAIN, 14, 8));
+		exp.append(format(VAR, "long", "d", "8"));
 		exp.append(format(EXIT));
 		assertEquals(exp.toString(), getOutput());
 	}

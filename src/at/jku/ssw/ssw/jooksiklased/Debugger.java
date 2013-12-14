@@ -3,28 +3,7 @@ package at.jku.ssw.ssw.jooksiklased;
 import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.NOT_YET_RUNNING;
 import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.RUNNING;
 import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.TERMINATED;
-import static at.jku.ssw.ssw.jooksiklased.Message.BREAKPOINT_NOT_FOUND;
-import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
-import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
-import static at.jku.ssw.ssw.jooksiklased.Message.FIELD;
-import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
-import static at.jku.ssw.ssw.jooksiklased.Message.INVALID_CMD;
-import static at.jku.ssw.ssw.jooksiklased.Message.LIST_BREAKPOINTS;
-import static at.jku.ssw.ssw.jooksiklased.Message.METHOD_OVERLOAD;
-import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELD;
-import static at.jku.ssw.ssw.jooksiklased.Message.NO_LOCALS;
-import static at.jku.ssw.ssw.jooksiklased.Message.NO_METHOD;
-import static at.jku.ssw.ssw.jooksiklased.Message.REMOVE_BREAKPOINT;
-import static at.jku.ssw.ssw.jooksiklased.Message.RUN;
-import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
-import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
-import static at.jku.ssw.ssw.jooksiklased.Message.TOO_MANY_ARGS;
-import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
-import static at.jku.ssw.ssw.jooksiklased.Message.UNKNOWN;
-import static at.jku.ssw.ssw.jooksiklased.Message.USAGE;
-import static at.jku.ssw.ssw.jooksiklased.Message.VAR;
-import static at.jku.ssw.ssw.jooksiklased.Message.VM_NOT_RUNNING;
-import static at.jku.ssw.ssw.jooksiklased.Message.VM_RUNNING;
+import static at.jku.ssw.ssw.jooksiklased.Message.*;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -219,7 +198,7 @@ public abstract class Debugger {
 				break;
 			}
 		}
-		
+
 		assert curThread != null;
 	}
 
@@ -352,13 +331,17 @@ public abstract class Debugger {
 	 */
 	private void performFields(final String className) {
 		final ReferenceType clazz = findClass(className);
-		for (Field f : clazz.visibleFields()) {
-			if (f.isStatic()) {
-				String value = valueToString(clazz.getValue(f), false);
-				print(VAR, f.typeName(), f.name(), value);
-			} else {
-				print(FIELD, f.typeName(), f.name());
+		if (clazz.visibleFields().size() > 0) {
+			for (Field f : clazz.visibleFields()) {
+				if (f.isStatic()) {
+					String value = valueToString(clazz.getValue(f), false);
+					print(VAR, f.typeName(), f.name(), value);
+				} else {
+					print(FIELD, f.typeName(), f.name());
+				}
 			}
+		} else {
+			print(NO_FIELDS, className);
 		}
 	}
 
@@ -423,7 +406,7 @@ public abstract class Debugger {
 			final String fieldName, final boolean dump) {
 		final ReferenceType clazz = findClass(className);
 		final Field f = clazz.fieldByName(fieldName);
-		if (f.isStatic())
+		if (f != null && f.isStatic())
 			print(VAR, f.typeName(), f.name(),
 					valueToString(clazz.getValue(f), dump));
 		else
@@ -799,7 +782,7 @@ public abstract class Debugger {
 						break;
 
 					case "at": // e.g. "stop at MyClass:22"
-						className = st.nextToken(":").trim();
+						className = st.nextToken(": ").trim();
 						lineNumber = Integer.parseInt(st.nextToken());
 						breakpoint = new Breakpoint(className, lineNumber);
 						break;
@@ -847,11 +830,10 @@ public abstract class Debugger {
 				}
 				break;
 
-			case "catch":
-			case "ignore":
-			case "threads":
-			case "thread":
-				throw new UnsupportedOperationException(cmd);
+			// TODO case "catch":
+			// TODO case "ignore":
+			// TODO case "threads":
+			// TODO case "thread":
 
 			case "exit":
 			case "quit":
@@ -859,22 +841,23 @@ public abstract class Debugger {
 				break;
 
 			default:
-				print(USAGE);
+				throw new UnsupportedOperationException();
 			}
-		} catch (NoSuchElementException e) {
+
+			if (className != null)
+				debuggee = className.trim();
+
+			if (st.hasMoreTokens()) {
+				StringBuilder sb = new StringBuilder();
+				while (st.hasMoreTokens()) {
+					sb.append(st.nextToken());
+					sb.append(" ");
+				}
+				print(TOO_MANY_ARGS, sb.toString().trim());
+			}
+		} catch (NoSuchElementException | UnsupportedOperationException e) {
 			print(INVALID_CMD, cmd);
-		}
-
-		if (className != null)
-			debuggee = className.trim();
-
-		if (st.hasMoreTokens()) {
-			StringBuilder sb = new StringBuilder();
-			while (st.hasMoreTokens()) {
-				sb.append(st.nextToken());
-				sb.append(" ");
-			}
-			print(TOO_MANY_ARGS, sb.toString().trim());
+			print(USAGE);
 		}
 	}
 

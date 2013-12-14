@@ -48,7 +48,7 @@ public class TextDebugger extends Debugger {
 				default:
 					perform(cmd);
 				}
-			} catch (IOException e) {
+			} catch (IOException | NullPointerException e) {
 				retValue = -1;
 				break;
 			}
