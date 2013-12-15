@@ -1,4 +1,4 @@
-jooksiklased - A Java program debugger
+Jooksiklased - Java program debugger
 ======================================
 
 Project
@@ -19,5 +19,15 @@ The functionality is planned to be equivalent to Oracle's [JDB](http://download.
 - **where**: prints a snapshot of the method stack. I.e. all currently active methods
 - **stop**: creates a breakpoint or prints all set breakpoints
 	- `stop` - prints all available breakpoints
-	
-... to be continued!
+	- `stop in MyClass.myMethod` - creates a breakpoint at the first executable line in method `myMethod` of class `MyClass`
+	- `stop at MyClass:42` - creates a breakpoint at line `42` of class `MyClass`
+- **clear**: clears breakpoints or prints all set breakpoints
+	- `clear` - see `stop`
+	- `clear MyClass.myMethod` - removes breakpoint in `myMethod` of class `MyClass`
+	- `clear MyClass:42` - removes breakpoint at line number `42` of class `MyClass`
+- **step**: takes a step of one line of code in the current stack frame
+- **next**: see `step`
+
+Naming
+------
+The name "Jooksiklased" is the Estonian word for "ground beetle".
