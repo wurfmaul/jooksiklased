@@ -20,7 +20,7 @@ public class RecursionTest extends AbstractTest {
 	private static final String ARGS = "java.lang.String[]";
 
 	public RecursionTest() {
-		classUnderTest = "Recursion";
+		args = new String[] { "Recursion" };
 	}
 
 	@Test

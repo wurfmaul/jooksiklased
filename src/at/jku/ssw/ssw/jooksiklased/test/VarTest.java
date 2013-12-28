@@ -19,7 +19,7 @@ public class VarTest extends AbstractTest {
 	private static final String ARGS = "java.lang.String[]";
 
 	public VarTest() {
-		classUnderTest = "Calc";
+		args = new String[] { "Calc" };
 	}
 
 	@Test

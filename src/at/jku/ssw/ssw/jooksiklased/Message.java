@@ -24,7 +24,10 @@ public enum Message {
 	REMOVE_BREAKPOINT("Removed: breakpoint %s"),
 	RUN("run %s"),
 	SET_BREAKPOINT("Set breakpoint in '%s' at line %d"), 
-	STEP("Step completed: \"thread=%s\", %s, line=%d bci=%d"), 
+	STEP("Step completed: \"thread=%s\", %s, line=%d bci=%d"),
+	THREAD_GROUP("Group %s:"),
+	THREAD_STATUS("  (%s)0x%x\t\t%s\t\t%s"),
+	THREAD_STATUS_BREAKPOINT("  (%s)0x%x\t\t%s\t\t%s (at breakpoint)"),
 	TOO_MANY_ARGS("No use for arguments: %s"), 
 	TRACE("%s"), 
 	UNABLE_TO_ATTACH("Unable to attach due to the following error: '%s'."),
@@ -42,10 +45,6 @@ public enum Message {
 
 	private Message(String msg) {
 		this.msg = msg;
-	}
-	
-	public String format(Object...args) {
-		return format(msg, args);
 	}
 	
 	public static String format(Message msg, Object...args) {

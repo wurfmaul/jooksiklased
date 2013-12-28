@@ -22,11 +22,11 @@ public abstract class AbstractTest {
 	private static final String KEY_ID_CLOSE = ")";
 
 	protected TestDebugger debugger;
-	protected String classUnderTest;
+	protected String[] args = new String[0];
 
 	@Before
 	public void setUp() throws Exception {
-		debugger = new TestDebugger(classUnderTest);
+		debugger = new TestDebugger(args);
 	}
 
 	/**

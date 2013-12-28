@@ -12,8 +12,8 @@ import java.io.OutputStream;
  */
 public class TestDebugger extends Debugger {
 
-	public TestDebugger(String debuggee) {
-		super(debuggee);
+	public TestDebugger(String... args) {
+		super(args);
 		out = new ByteArrayOutputStream();
 	}
 

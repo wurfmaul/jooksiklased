@@ -17,7 +17,7 @@ public class BreakpointTest extends AbstractTest {
 	private static final String MAIN = "Test.main(java.lang.String[])";
 
 	public BreakpointTest() {
-		classUnderTest = "Test";
+		args = new String[] { "Test" };
 	}
 
 	@Test

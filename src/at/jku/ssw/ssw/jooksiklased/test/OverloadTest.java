@@ -23,7 +23,7 @@ import org.junit.Test;
 public class OverloadTest extends AbstractTest {
 
 	public OverloadTest() {
-		classUnderTest = "Overload";
+		args = new String[] { "Overload" };
 	}
 
 	@Test

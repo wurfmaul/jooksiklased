@@ -20,6 +20,9 @@ import static at.jku.ssw.ssw.jooksiklased.Message.REMOVE_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.RUN;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
+import static at.jku.ssw.ssw.jooksiklased.Message.THREAD_GROUP;
+import static at.jku.ssw.ssw.jooksiklased.Message.THREAD_STATUS;
+import static at.jku.ssw.ssw.jooksiklased.Message.THREAD_STATUS_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.TOO_MANY_ARGS;
 import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
 import static at.jku.ssw.ssw.jooksiklased.Message.UNABLE_TO_ATTACH;
@@ -30,14 +33,18 @@ import static at.jku.ssw.ssw.jooksiklased.Message.USAGE;
 import static at.jku.ssw.ssw.jooksiklased.Message.VAR;
 import static at.jku.ssw.ssw.jooksiklased.Message.VM_NOT_RUNNING;
 import static at.jku.ssw.ssw.jooksiklased.Message.VM_RUNNING;
+import static at.jku.ssw.ssw.jooksiklased.Message.format;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Queue;
 import java.util.Stack;
@@ -63,6 +70,7 @@ import com.sun.jdi.ReferenceType;
 import com.sun.jdi.ShortValue;
 import com.sun.jdi.StackFrame;
 import com.sun.jdi.StringReference;
+import com.sun.jdi.ThreadGroupReference;
 import com.sun.jdi.ThreadReference;
 import com.sun.jdi.VMDisconnectedException;
 import com.sun.jdi.Value;
@@ -609,6 +617,42 @@ public abstract class Debugger {
 	}
 
 	/**
+	 * Print all currently active threads.
+	 */
+	private void performThreads() {
+		// categorize threads
+		final Map<ThreadGroupReference, List<ThreadReference>> groups = new LinkedHashMap<>();
+		for (ThreadReference t : vm.allThreads()) {
+			ThreadGroupReference group = t.threadGroup();
+			if (!groups.containsKey(group))
+				groups.put(group, new LinkedList<ThreadReference>());
+			groups.get(group).add(t);
+		}
+
+		// print categories
+		for (Entry<ThreadGroupReference, List<ThreadReference>> e : groups
+				.entrySet()) {
+			print(THREAD_GROUP, e.getKey().name());
+
+			// print threads
+			String type, name, status;
+			long id;
+
+			for (ThreadReference t : e.getValue()) {
+				type = t.type().name();
+				id = t.uniqueID();
+				name = t.name();
+				status = statusToString(t.status());
+
+				if (t.isAtBreakpoint())
+					print(THREAD_STATUS_BREAKPOINT, type, id, name, status);
+				else
+					print(THREAD_STATUS, type, id, name, status);
+			}
+		}
+	}
+
+	/**
 	 * Prints a method trace, i.e. all currently active methods.
 	 */
 	private void performWhere() {
@@ -663,9 +707,36 @@ public abstract class Debugger {
 	 */
 	private void print(Message msg, Object... args) {
 		try {
-			out.write(msg.format(args).getBytes());
+			out.write(format(msg, args).getBytes());
 		} catch (IOException e) {
 			e.printStackTrace();
+		}
+	}
+
+	/**
+	 * Returns human readable thread status from {@link ThreadReference} status
+	 * codes.
+	 * 
+	 * @param status
+	 *            Integer representing the status code.
+	 * @return String representation of thread status.
+	 */
+	private static String statusToString(final int status) {
+		switch (status) {
+		case ThreadReference.THREAD_STATUS_ZOMBIE:
+			return "terminated";
+		case ThreadReference.THREAD_STATUS_RUNNING:
+			return "running";
+		case ThreadReference.THREAD_STATUS_SLEEPING:
+			return "sleeping";
+		case ThreadReference.THREAD_STATUS_MONITOR:
+			return "cond. waiting";
+		case ThreadReference.THREAD_STATUS_WAIT:
+			return "waiting";
+		case ThreadReference.THREAD_STATUS_NOT_STARTED:
+			return "not started";
+		default:
+			return "unknown";
 		}
 	}
 
@@ -874,11 +945,13 @@ public abstract class Debugger {
 					performPrintBreakpoints();
 				}
 				break;
+			case "threads":
+				performThreads();
+				break;
+			case "thread":
 
-			// TODO case "catch":
-			// TODO case "ignore":
-			// TODO case "threads":
-			// TODO case "thread":
+				// TODO case "catch":
+				// TODO case "ignore":
 
 			case "exit":
 			case "quit":
