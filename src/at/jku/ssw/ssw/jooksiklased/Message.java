@@ -12,7 +12,8 @@ public enum Message {
 			+ "is loaded."), 
 	EXIT("The application exited"), 
 	FIELD("%s %s"), 
-	HIT_BREAKPOINT("Breakpoint hit: \"thread=" + "%s\", %s, line=%d bci=%d"), 
+	HIT_BREAKPOINT("Breakpoint hit: \"thread=" + "%s\", %s, line=%d bci=%d"),
+	ILLEGAL_ARGUMENTS("Illegal arguments: '%s'."),
 	INVALID_CMD("Command not valid: '%s'"), 
 	LIST_BREAKPOINTS("Breakpoints set:\n%s"), 
 	METHOD_OVERLOAD("Unable to set breakpoint %s: Method %s is overloaded"),
@@ -26,6 +27,9 @@ public enum Message {
 	STEP("Step completed: \"thread=%s\", %s, line=%d bci=%d"), 
 	TOO_MANY_ARGS("No use for arguments: %s"), 
 	TRACE("%s"), 
+	UNABLE_TO_ATTACH("Unable to attach due to the following error: '%s'."),
+	UNABLE_TO_LAUNCH("Unable to launch due to the following error: '%s'."),
+	UNABLE_TO_START("Unable to start due to the following error: '%s'."),
 	UNKNOWN("Name unknown: %s"), 
 	USAGE("run / cont / print / dump / threads / thread / where / stop / clear "
 			+ "/ step / next / catch / ignore"), // TODO formulate usage info
@@ -41,11 +45,11 @@ public enum Message {
 	}
 	
 	public String format(Object...args) {
-		return String.format(msg + "\n", args);
+		return format(msg, args);
 	}
 	
 	public static String format(Message msg, Object...args) {
-		return msg.format(args);
+		return String.format(msg + "\n", args);
 	}
 
 	@Override

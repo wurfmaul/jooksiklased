@@ -3,7 +3,33 @@ package at.jku.ssw.ssw.jooksiklased;
 import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.NOT_YET_RUNNING;
 import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.RUNNING;
 import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.TERMINATED;
-import static at.jku.ssw.ssw.jooksiklased.Message.*;
+import static at.jku.ssw.ssw.jooksiklased.Message.BREAKPOINT_NOT_FOUND;
+import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
+import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
+import static at.jku.ssw.ssw.jooksiklased.Message.FIELD;
+import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
+import static at.jku.ssw.ssw.jooksiklased.Message.ILLEGAL_ARGUMENTS;
+import static at.jku.ssw.ssw.jooksiklased.Message.INVALID_CMD;
+import static at.jku.ssw.ssw.jooksiklased.Message.LIST_BREAKPOINTS;
+import static at.jku.ssw.ssw.jooksiklased.Message.METHOD_OVERLOAD;
+import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELD;
+import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELDS;
+import static at.jku.ssw.ssw.jooksiklased.Message.NO_LOCALS;
+import static at.jku.ssw.ssw.jooksiklased.Message.NO_METHOD;
+import static at.jku.ssw.ssw.jooksiklased.Message.REMOVE_BREAKPOINT;
+import static at.jku.ssw.ssw.jooksiklased.Message.RUN;
+import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
+import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
+import static at.jku.ssw.ssw.jooksiklased.Message.TOO_MANY_ARGS;
+import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
+import static at.jku.ssw.ssw.jooksiklased.Message.UNABLE_TO_ATTACH;
+import static at.jku.ssw.ssw.jooksiklased.Message.UNABLE_TO_LAUNCH;
+import static at.jku.ssw.ssw.jooksiklased.Message.UNABLE_TO_START;
+import static at.jku.ssw.ssw.jooksiklased.Message.UNKNOWN;
+import static at.jku.ssw.ssw.jooksiklased.Message.USAGE;
+import static at.jku.ssw.ssw.jooksiklased.Message.VAR;
+import static at.jku.ssw.ssw.jooksiklased.Message.VM_NOT_RUNNING;
+import static at.jku.ssw.ssw.jooksiklased.Message.VM_RUNNING;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -118,11 +144,9 @@ public abstract class Debugger {
 			vm = con.attach(args);
 			init();
 		} catch (IOException e) {
-			// TODO error message unable to connect
-			e.printStackTrace();
+			print(UNABLE_TO_ATTACH, e.getMessage());
 		} catch (IllegalConnectorArgumentsException e) {
-			// TODO error message port number invalid
-			e.printStackTrace();
+			print(ILLEGAL_ARGUMENTS, e.getMessage());
 		}
 	}
 
@@ -132,29 +156,35 @@ public abstract class Debugger {
 	 * 
 	 * @param debuggee
 	 *            The name of the class which is about to be debugged.
+	 * @param args
+	 *            The debuggee's arguments.
 	 */
-	protected Debugger(final String debuggee) {
-		this.debuggee = debuggee;
+	protected Debugger(final String... args) {
+		// parse arguments
+		assert args.length >= 1;
+		this.debuggee = args[0];
+		final StringBuilder sb = new StringBuilder();
+		for (String s : args) {
+			sb.append(s);
+			sb.append(" ");
+		}
 
 		// establish connection
 		LaunchingConnector con = Bootstrap.virtualMachineManager()
 				.defaultConnector();
-		Map<String, Argument> args = con.defaultArguments();
-		((Argument) args.get("main")).setValue(debuggee);
+		Map<String, Argument> arguments = con.defaultArguments();
+		((Argument) arguments.get("main")).setValue(sb.toString());
 
 		// establish virtual machine for debuggee
 		try {
-			vm = con.launch(args);
+			vm = con.launch(arguments);
 			init();
 		} catch (IOException e) {
-			// TODO error message unable to connect
-			e.printStackTrace();
+			print(UNABLE_TO_LAUNCH, e.getMessage());
 		} catch (IllegalConnectorArgumentsException e) {
-			// TODO error message debuggee invalid
-			e.printStackTrace();
+			print(ILLEGAL_ARGUMENTS, e.getMessage());
 		} catch (VMStartException e) {
-			// TODO error message vm starting error
-			e.printStackTrace();
+			print(UNABLE_TO_START, e.getMessage());
 		}
 	}
 
@@ -296,7 +326,8 @@ public abstract class Debugger {
 					} else if (e instanceof MethodEntryEvent) {
 						// push entered method on method stack
 						final MethodEntryEvent mee = (MethodEntryEvent) e;
-						methodStack.push(mee.method());
+						final Method method = mee.method();
+						methodStack.push(method);
 
 						// do not resume vm if a breakpoint is reached
 						boolean isBreakpoint = false;
@@ -437,9 +468,9 @@ public abstract class Debugger {
 			}
 			// instance variable of static method
 			Value val;
-			if(curFrame.location().method().isStatic()) {
+			if (curFrame.location().method().isStatic()) {
 				final List<ObjectReference> instances = type.instances(0);
-				if(instances.size() == 0) {
+				if (instances.size() == 0) {
 					// class not yet initiated
 					print(FIELD, f.typeName(), f.name());
 					return;

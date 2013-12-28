@@ -3,6 +3,7 @@ package at.jku.ssw.ssw.jooksiklased;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.Arrays;
 
 /**
  * Implementation of debugger, providing a textual interface.
@@ -14,12 +15,12 @@ public class TextDebugger extends Debugger {
 	/** Flag for the main loop, whether to exit at next run or not. */
 	private boolean terminate = false;
 
-	private TextDebugger(int port) {
+	private TextDebugger(final int port) {
 		super(port);
 	}
 
-	private TextDebugger(String debuggee) {
-		super(debuggee);
+	private TextDebugger(final String... args) {
+		super(args);
 	}
 
 	/**
@@ -91,13 +92,15 @@ public class TextDebugger extends Debugger {
 			}
 		}
 
-		// TODO deal with debuggee's arguments
-
-		if (i < args.length) {
-			debugger = new TextDebugger(args[i]);
-			debugger.ui();
-		} else if (port >= 0) {
+		if (port >= 0) {
+			// attach to vm, which takes care of args
 			debugger = new TextDebugger(port);
+			debugger.ui();
+		} else if (i < args.length) {
+			// forward arguments
+			final String[] arg = Arrays.copyOfRange(args, i, args.length);
+			// launch
+			debugger = new TextDebugger(arg);
 			debugger.ui();
 		} else {
 			System.err.println("Could not start debugger.");
