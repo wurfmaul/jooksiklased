@@ -3,6 +3,7 @@ package at.jku.ssw.ssw.jooksiklased;
 import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.NOT_YET_RUNNING;
 import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.RUNNING;
 import static at.jku.ssw.ssw.jooksiklased.Debugger.Status.TERMINATED;
+import static at.jku.ssw.ssw.jooksiklased.Message.BREAKPOINT_ERROR;
 import static at.jku.ssw.ssw.jooksiklased.Message.BREAKPOINT_NOT_FOUND;
 import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
@@ -16,13 +17,14 @@ import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELD;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELDS;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_LOCALS;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_METHOD;
+import static at.jku.ssw.ssw.jooksiklased.Message.NO_SUCH_THREAD;
 import static at.jku.ssw.ssw.jooksiklased.Message.REMOVE_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.RUN;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
 import static at.jku.ssw.ssw.jooksiklased.Message.THREAD_GROUP;
 import static at.jku.ssw.ssw.jooksiklased.Message.THREAD_STATUS;
-import static at.jku.ssw.ssw.jooksiklased.Message.THREAD_STATUS_BREAKPOINT;
+import static at.jku.ssw.ssw.jooksiklased.Message.THREAD_STATUS_BP;
 import static at.jku.ssw.ssw.jooksiklased.Message.TOO_MANY_ARGS;
 import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
 import static at.jku.ssw.ssw.jooksiklased.Message.UNABLE_TO_ATTACH;
@@ -125,6 +127,8 @@ public abstract class Debugger {
 	private Stack<Method> methodStack;
 	/** Breakpoints that were not yet set because vm is not loaded. */
 	private Queue<Breakpoint> pendingBreakpoints;
+	/** Mapping from thread index to referenced thread. */
+	private Map<Integer, ThreadReference> threads;
 	/** The name of the debuggee class. */
 	private String debuggee = null;
 
@@ -219,6 +223,7 @@ public abstract class Debugger {
 		// make space for pending operations
 		pendingBreakpoints = new ArrayDeque<>();
 		methodStack = new Stack<>();
+		threads = new LinkedHashMap<>();
 
 		// Establish Request Manager
 		reqManager = vm.eventRequestManager();
@@ -580,22 +585,35 @@ public abstract class Debugger {
 	private void performStop(final Breakpoint breakpoint) {
 		final String className = breakpoint.className;
 		final String methodName = breakpoint.methodName;
-		final int lineNumber = breakpoint.lineNumber;
+		final ReferenceType clazz = findClass(className);
+		int lineNumber = breakpoint.lineNumber;
 
 		if (lineNumber >= 0) {
 			// find location by line number
 			try {
-				List<Location> locs = findClass(className).locationsOfLine(
-						lineNumber);
-				assert locs.size() == 1;
-				setBreakpoint(locs.get(0));
+				// define range
+				final List<Location> allLines = clazz.allLineLocations();
+				final int lastLine = allLines.get(allLines.size() - 1)
+						.lineNumber();
+				List<Location> locs;
+				// find executable line in range
+				do {
+					locs = clazz.locationsOfLine(lineNumber++);
+				} while (locs.size() < 1 && lineNumber < lastLine);
+
+				if (locs.isEmpty()) {
+					print(BREAKPOINT_ERROR, breakpoint, breakpoint.lineNumber,
+							className);
+				} else {
+					setBreakpoint(locs.get(0));
+				}
+
 			} catch (AbsentInformationException e) {
 				e.printStackTrace();
 			}
 		} else {
 			// find location by method name
-			final List<Method> methods = findClass(className).methodsByName(
-					methodName);
+			final List<Method> methods = clazz.methodsByName(methodName);
 
 			if (methods.size() == 1) {
 				Method method = methods.get(0);
@@ -628,7 +646,9 @@ public abstract class Debugger {
 				groups.put(group, new LinkedList<ThreadReference>());
 			groups.get(group).add(t);
 		}
-
+		// prepare listing
+		threads.clear();
+		int idx = 0;
 		// print categories
 		for (Entry<ThreadGroupReference, List<ThreadReference>> e : groups
 				.entrySet()) {
@@ -639,16 +659,31 @@ public abstract class Debugger {
 			long id;
 
 			for (ThreadReference t : e.getValue()) {
+				threads.put(idx, t);
 				type = t.type().name();
 				id = t.uniqueID();
 				name = t.name();
 				status = statusToString(t.status());
-
 				if (t.isAtBreakpoint())
-					print(THREAD_STATUS_BREAKPOINT, type, id, name, status);
+					print(THREAD_STATUS_BP, idx, type, id, name, status);
 				else
-					print(THREAD_STATUS, type, id, name, status);
+					print(THREAD_STATUS, idx, type, id, name, status);
+				idx++;
 			}
+		}
+	}
+
+	/**
+	 * Switch current thread to thread with given index.
+	 * 
+	 * @param index
+	 *            Index of thread which is to be the current thread from now.
+	 */
+	private void performThread(final int index) {
+		if (threads.containsKey(index)) {
+			curThread = threads.get(index);
+		} else {
+			print(NO_SUCH_THREAD, index);
 		}
 	}
 
@@ -945,13 +980,18 @@ public abstract class Debugger {
 					performPrintBreakpoints();
 				}
 				break;
+
 			case "threads":
 				performThreads();
 				break;
-			case "thread":
 
-				// TODO case "catch":
-				// TODO case "ignore":
+			case "thread":
+				int index = Integer.parseInt(st.nextToken());
+				performThread(index);
+				break;
+
+			// TODO case "catch":
+			// TODO case "ignore":
 
 			case "exit":
 			case "quit":
@@ -973,12 +1013,25 @@ public abstract class Debugger {
 				}
 				print(TOO_MANY_ARGS, sb.toString().trim());
 			}
-		} catch (NoSuchElementException | UnsupportedOperationException e) {
+		} catch (NoSuchElementException | UnsupportedOperationException
+				| NumberFormatException e) {
 			print(INVALID_CMD, cmd);
 			print(USAGE);
 		}
 	}
 
+	/**
+	 * Returns the name of the current thread
+	 * 
+	 * @return Name of the current thread.
+	 */
+	public String getThreadName() {
+		return curThread.name();
+	}
+
+	/**
+	 * Indicates the current status of the machine.
+	 */
 	static enum Status {
 		RUNNING, TERMINATED, NOT_YET_RUNNING;
 	}

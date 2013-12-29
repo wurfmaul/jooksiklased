@@ -8,6 +8,7 @@ package at.jku.ssw.ssw.jooksiklased;
  */
 public enum Message {
 	BREAKPOINT_NOT_FOUND("Not found: breakpoint %s"), 
+	BREAKPOINT_ERROR("Unable to set breakpoint %s : No code at line %d in %s"),
 	DEFER_BREAKPOINT("Deferring breakpoint %s.\nIt will be set after the class "
 			+ "is loaded."), 
 	EXIT("The application exited"), 
@@ -21,13 +22,14 @@ public enum Message {
 	NO_FIELDS("No fields in class %s"),
 	NO_METHOD("Unable to set breakpoint %s : No method %s in %s"), 
 	NO_LOCALS("No local variables"),
+	NO_SUCH_THREAD("No thread with index %d."),
 	REMOVE_BREAKPOINT("Removed: breakpoint %s"),
 	RUN("run %s"),
 	SET_BREAKPOINT("Set breakpoint in '%s' at line %d"), 
 	STEP("Step completed: \"thread=%s\", %s, line=%d bci=%d"),
 	THREAD_GROUP("Group %s:"),
-	THREAD_STATUS("  (%s)0x%x\t\t%s\t\t%s"),
-	THREAD_STATUS_BREAKPOINT("  (%s)0x%x\t\t%s\t\t%s (at breakpoint)"),
+	THREAD_STATUS("  %d (%s)0x%x\t\t%s\t\t%s"),
+	THREAD_STATUS_BP("  %d (%s)0x%x\t\t%s\t\t%s (at breakpoint)"),
 	TOO_MANY_ARGS("No use for arguments: %s"), 
 	TRACE("%s"), 
 	UNABLE_TO_ATTACH("Unable to attach due to the following error: '%s'."),

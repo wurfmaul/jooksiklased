@@ -33,7 +33,7 @@ public class ArgThread extends Thread {
 				try {
 					threads[i].interrupt();
 					threads[i].join();
-				sum += threads[i].sum;
+					sum += threads[i].sum;
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}

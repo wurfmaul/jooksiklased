@@ -38,6 +38,7 @@ public class TextDebugger extends Debugger {
 
 		while (!terminate && status != Status.TERMINATED) {
 			try {
+				System.out.print(getThreadName());
 				System.out.print("> ");
 				cmd = in.readLine().trim();
 				switch (cmd) {
