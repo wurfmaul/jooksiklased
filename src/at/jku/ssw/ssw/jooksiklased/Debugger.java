@@ -8,14 +8,18 @@ import static at.jku.ssw.ssw.jooksiklased.Message.BREAKPOINT_NOT_FOUND;
 import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
 import static at.jku.ssw.ssw.jooksiklased.Message.FIELD;
+import static at.jku.ssw.ssw.jooksiklased.Message.FIELDS_HEADER;
+import static at.jku.ssw.ssw.jooksiklased.Message.FIELD_INHERITED;
 import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.ILLEGAL_ARGUMENTS;
 import static at.jku.ssw.ssw.jooksiklased.Message.INVALID_CMD;
 import static at.jku.ssw.ssw.jooksiklased.Message.LIST_BREAKPOINTS;
 import static at.jku.ssw.ssw.jooksiklased.Message.METHOD_OVERLOAD;
+import static at.jku.ssw.ssw.jooksiklased.Message.NO_CLASS;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELD;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_FIELDS;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_LOCALS;
+import static at.jku.ssw.ssw.jooksiklased.Message.NO_LOCAL_INFO;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_METHOD;
 import static at.jku.ssw.ssw.jooksiklased.Message.NO_SUCH_THREAD;
 import static at.jku.ssw.ssw.jooksiklased.Message.REMOVE_BREAKPOINT;
@@ -27,6 +31,8 @@ import static at.jku.ssw.ssw.jooksiklased.Message.THREAD_STATUS;
 import static at.jku.ssw.ssw.jooksiklased.Message.THREAD_STATUS_BP;
 import static at.jku.ssw.ssw.jooksiklased.Message.TOO_MANY_ARGS;
 import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
+import static at.jku.ssw.ssw.jooksiklased.Message.TRACE_LOC;
+import static at.jku.ssw.ssw.jooksiklased.Message.TRACE_SRC;
 import static at.jku.ssw.ssw.jooksiklased.Message.UNABLE_TO_ATTACH;
 import static at.jku.ssw.ssw.jooksiklased.Message.UNABLE_TO_LAUNCH;
 import static at.jku.ssw.ssw.jooksiklased.Message.UNABLE_TO_START;
@@ -377,11 +383,14 @@ public abstract class Debugger {
 	private void performFields(final String className) {
 		final ReferenceType clazz = findClass(className);
 		if (clazz.visibleFields().size() > 0) {
+			print(FIELDS_HEADER);
 			for (Field f : clazz.visibleFields()) {
-				if (f.isStatic()) {
-					String value = valueToString(clazz.getValue(f), false);
-					print(VAR, f.typeName(), f.name(), value);
+				if (!clazz.equals(f.declaringType())) {
+					// extract declaring class (heritage)
+					final String declClass = f.declaringType().name();
+					print(FIELD_INHERITED, f.typeName(), f.name(), declClass);
 				} else {
+					// not inherited
 					print(FIELD, f.typeName(), f.name());
 				}
 			}
@@ -407,8 +416,9 @@ public abstract class Debugger {
 			}
 		} catch (IncompatibleThreadStateException e) {
 			e.printStackTrace();
+		} catch (IndexOutOfBoundsException e) {
 		} catch (AbsentInformationException e) {
-			e.printStackTrace();
+			print(NO_LOCAL_INFO);
 		}
 	}
 
@@ -490,8 +500,7 @@ public abstract class Debugger {
 				}
 				// class already initiated
 				assert instances.size() == 1;
-				ObjectReference ref = instances.get(0);
-				val = ref.getValue(f);
+				val = instances.get(0).getValue(f);
 			} else {
 				val = curFrame.thisObject().getValue(f);
 			}
@@ -499,7 +508,7 @@ public abstract class Debugger {
 		} catch (IncompatibleThreadStateException e) {
 			e.printStackTrace();
 		} catch (AbsentInformationException e) {
-			e.printStackTrace();
+			print(UNKNOWN, varName);
 		}
 	}
 
@@ -537,7 +546,7 @@ public abstract class Debugger {
 						methodStack.push(((MethodEntryEvent) e).method());
 						// tell everyone that we are running
 						status = RUNNING;
-						// init done, tell loop to stop
+						// initialization done, tell loop to exit
 						exit = true;
 						break;
 					} else {
@@ -691,28 +700,26 @@ public abstract class Debugger {
 	 * Prints a method trace, i.e. all currently active methods.
 	 */
 	private void performWhere() {
-		final StringBuilder sb = new StringBuilder();
 		final int size = methodStack.size();
 		for (int i = 1; i <= size; ++i) {
 			final Method method = methodStack.get(size - i);
-			sb.append("\t[");
-			sb.append(i);
-			sb.append("] ");
-			sb.append(method.declaringType().name());
-			sb.append(".");
-			sb.append(method.name());
+			final String caller = method.declaringType().name();
 			try {
 				final String sourceName = method.location().sourceName();
-				sb.append(" (");
-				sb.append(sourceName);
-				sb.append(")");
-			} catch (AbsentInformationException e) {
-			}
-			if (i < size) {
-				sb.append("\n");
+				final Location curLoc = curThread.frame(0).location();
+				if (i == 1 && method.equals(curLoc.method())) {
+					// current location
+					final int line = curLoc.lineNumber();
+					print(TRACE_LOC, i, caller, method.name(), sourceName, line);
+				} else {
+					// TODO trace should always include line number
+					print(TRACE_SRC, i, caller, method.name(), sourceName);
+				}
+			} catch (AbsentInformationException
+					| IncompatibleThreadStateException e) {
+				print(TRACE, i, caller, method.name());
 			}
 		}
-		print(TRACE, sb.toString());
 	}
 
 	/**
@@ -850,6 +857,8 @@ public abstract class Debugger {
 			}
 			return sb.toString();
 		} else {
+			if (val == null)
+				return "<no value>";
 			throw new UnsupportedOperationException(val.getClass().getName());
 		}
 	}
@@ -919,7 +928,10 @@ public abstract class Debugger {
 				break;
 
 			case "fields":
-				performFields(st.nextToken().trim());
+				if (st.hasMoreTokens())
+					performFields(st.nextToken().trim());
+				else
+					print(NO_CLASS);
 				break;
 
 			case "stop":

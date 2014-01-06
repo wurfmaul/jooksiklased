@@ -3,6 +3,7 @@ package at.jku.ssw.ssw.jooksiklased.test;
 import static at.jku.ssw.ssw.jooksiklased.Message.DEFER_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.EXIT;
 import static at.jku.ssw.ssw.jooksiklased.Message.FIELD;
+import static at.jku.ssw.ssw.jooksiklased.Message.FIELDS_HEADER;
 import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.INVALID_CMD;
 import static at.jku.ssw.ssw.jooksiklased.Message.METHOD_OVERLOAD;
@@ -21,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
 public class OverloadTest extends AbstractTest {
+	private static final String ADD_METHOD = "Overload.add(int, long)";
 
 	public OverloadTest() {
 		args = new String[] { "Overload" };
@@ -68,9 +70,9 @@ public class OverloadTest extends AbstractTest {
 		exp.append(format(DEFER_BREAKPOINT, "Overload:25"));
 		exp.append(format(TOO_MANY_ARGS, "and do something"));
 		exp.append(format(RUN, "Overload"));
-		exp.append(format(SET_BREAKPOINT, "Overload.add(int, long)", 25));
-		exp.append(format(HIT_BREAKPOINT, "main", "Overload.add(int, long)",
-				25, 0));
+		exp.append(format(SET_BREAKPOINT, ADD_METHOD, 25));
+		exp.append(format(HIT_BREAKPOINT, "main", ADD_METHOD, 25, 0));
+		exp.append(format(FIELDS_HEADER));
 		exp.append(format(FIELD, "int", "i"));
 		exp.append(format(NO_FIELD, "a", "Overload"));
 		exp.append(format(NO_METHOD, "Overload.sub", "sub", "Overload"));
@@ -94,6 +96,7 @@ public class OverloadTest extends AbstractTest {
 		exp.append(format(RUN, "Overload"));
 		exp.append(format(SET_BREAKPOINT, "Overload.mul(int)", 33));
 		exp.append(format(HIT_BREAKPOINT, "main", "Overload.mul(int)", 33, 0));
+		exp.append(format(FIELDS_HEADER));
 		exp.append(format(FIELD, "int", "i"));
 		exp.append(format(VAR, "int", "i", "7"));
 		exp.append(format(STEP, "main", "Overload.mul(int)", 34, 10));

@@ -16,6 +16,9 @@ The functionality is planned to be equivalent to Oracle's [JDB](http://download.
 	- `print i` - prints type and value of local variable or field `i`
 	- `print MyClass.i` - prints field `i` of class `MyClass`
 - **dump**: same as print, except it prints content of complex types (arrays, objects)
+- **locals**: list all visible local variables
+- **fields**: list all visible fields of a given class
+	- `fields MyClass` - lists all fields of class `MyClass`
 - **where**: prints a snapshot of the method stack. I.e. all currently active methods
 - **stop**: creates a breakpoint or prints all set breakpoints
 	- `stop` - prints all available breakpoints
@@ -27,6 +30,9 @@ The functionality is planned to be equivalent to Oracle's [JDB](http://download.
 	- `clear MyClass:42` - removes breakpoint at line number `42` of class `MyClass`
 - **step**: takes a step of one line of code in the current stack frame
 - **next**: see `step`
+- **threads**: list all currently active threads
+- **thread**: switch to specific thread by id, which is provided by the `threads` command
+	- `thread 1` - switch to thread with id `1`, must be performed after command `threads`
 
 Naming
 ------

@@ -7,7 +7,8 @@ import static at.jku.ssw.ssw.jooksiklased.Message.HIT_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.RUN;
 import static at.jku.ssw.ssw.jooksiklased.Message.SET_BREAKPOINT;
 import static at.jku.ssw.ssw.jooksiklased.Message.STEP;
-import static at.jku.ssw.ssw.jooksiklased.Message.TRACE;
+import static at.jku.ssw.ssw.jooksiklased.Message.TRACE_LOC;
+import static at.jku.ssw.ssw.jooksiklased.Message.TRACE_SRC;
 import static at.jku.ssw.ssw.jooksiklased.Message.VAR;
 import static at.jku.ssw.ssw.jooksiklased.Message.format;
 import static org.junit.Assert.assertEquals;
@@ -74,14 +75,13 @@ public class VarTest extends AbstractTest {
 		perform("where");
 		perform("cont");
 
-		final String trace = "\t[1] Calc.calc (Calc.java)\n"
-				+ "\t[2] Calc.main (Calc.java)";
 		final StringBuilder exp = new StringBuilder();
 		exp.append(format(DEFER_BREAKPOINT, "Calc:26"));
 		exp.append(format(RUN, "Calc"));
 		exp.append(format(SET_BREAKPOINT, "Calc.calc(float)", 26));
 		exp.append(format(HIT_BREAKPOINT, "main", "Calc.calc(float)", 26, 14));
-		exp.append(format(TRACE, trace));
+		exp.append(format(TRACE_LOC, 1, "Calc", "calc", "Calc.java", 26));
+		exp.append(format(TRACE_SRC, 2, "Calc", "main", "Calc.java"));
 		exp.append(format(EXIT));
 		assertEquals(exp.toString(), getOutput());
 	}
