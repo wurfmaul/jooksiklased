@@ -3,7 +3,7 @@
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="src" path="deb"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-	<classpathentry kind="lib" path="/lib/jvm/java-7-openjdk/lib/tools.jar" sourcepath="/usr/lib/jvm/java-7-openjdk/src.zip"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
+	<classpathentry kind="lib" path="/usr/lib/jvm/java-7-openjdk/lib/tools.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
